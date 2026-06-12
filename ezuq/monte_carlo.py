@@ -195,7 +195,7 @@ def run_chunk(settings_yaml, chunk_index):
         kinetic_perturbations = np.random.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix.shape[0]), cov=kinetic_covariance_matrix, size=CHUNK_SIZE)
     
     else:
-        with open(os.path.join(monte_carlo_dir, 'problem_desc.yaml'), 'r') as f:
+        with open(problem_desc_file, 'r') as f:
             problem = yaml.load(f, Loader=yaml.FullLoader)
 
         g_params = problem['g_params']

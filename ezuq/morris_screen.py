@@ -197,7 +197,7 @@ def run_chunk(settings_yaml, chunk_index):
     np.save(output_filename, y)
 
 
-def reassemble_chunks(morris_dir, condition_dir):
+def reassemble_chunks(morris_dir):
     """After all the chunks have been run, we need to reassemble the results into a single file for each condition"""
 
     # find all settings.yaml files in the condition dirs
@@ -242,7 +242,7 @@ def reassemble_chunks(morris_dir, condition_dir):
                 invalid_count += 1
                 index_redo.add(int(i / 1000.0))
 
-        print(f'{condition_name}, {(morris_y.shape[0] - invalid_count) / morris_y.shape[0]} valid')
+        print(f'{condition_name}, {(morris_y.shape[0] - invalid_count) / morris_y.shape[0] * 100:.2f} % valid')
         if invalid_count / morris_y.shape[0] > 0.01:
             print(f'You should redo condition {condition_name}')
             print(f'Redo indices: {index_redo}')
