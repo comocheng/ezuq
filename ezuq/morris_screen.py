@@ -4,6 +4,7 @@
 
 import os
 import pickle
+import shutil
 import sys
 
 import cantera as ct
@@ -67,6 +68,9 @@ def setup_runfiles(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=40
     np.save(os.path.join(morris_dir, 'morris_samples.npy'), X)
 
     ezuq.util.setup_condition_dirs(morris_dir, conditions)
+
+    # copy the slurm script into the Morris dir
+    shutil.copyfile(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'SLURM', 'run_morris.sh'), os.path.join(morris_dir, 'run_morris.sh'))
 
 
 def run_chunk(settings_yaml, chunk_index):
