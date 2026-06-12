@@ -7,7 +7,11 @@ It's a Python package to help you run uncertainty quantification on a microkinet
 
 
 ## Installation
-TODO - set up pip install ezuq or conda install ezuq
+1. Clone Repo
+2. `pip install -e .`
+
+
+TODO - pypi pip install and conda install
 
 
 ## How it works
