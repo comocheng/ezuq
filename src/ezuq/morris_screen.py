@@ -1,0 +1,196 @@
+"""Code for running initial Morris screening. For now we assume everyone is using the same Cord JSR experiment I am"""
+
+# This code will need to read in the RMG uncertainty matrices.
+
+import os
+import sys
+
+import yaml
+from ezuq.simulation.jsr import run_simulation
+import numpy as np
+
+import rmgpy.chemkin
+
+import cantera as ct
+import pickle
+import ezuq.util
+import scipy.stats
+
+import SALib.sample.morris
+
+
+CHUNK_SIZE = 1000
+
+def setup_runfiles(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=400):
+    """Set up the runfiles for the Morris screening.
+    working_dir should be the directory where the RMG and Cantera mechanisms are saved.
+    """
+
+    morris_dir = os.path.join(working_dir, 'morris_screen')
+    os.makedirs(morris_dir, exist_ok=True)
+
+    # load the covariance matrices
+    thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
+    kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
+
+
+    # confirm this matches the RMG mechanism
+    chemkin_file = os.path.join(working_dir, 'chem_annotated.inp')
+    dictionary_file = os.path.join(working_dir, 'species_dictionary.txt')
+    species_list, reaction_list = rmgpy.chemkin.load_chemkin_file(chemkin_file, dictionary_file)
+    assert len(species_list) == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species"
+    assert len(reaction_list) == kinetic_covariance_matrix.shape[0], "Kinetic covariance matrix size does not match number of reactions"
+
+    cantera_file = os.path.join(working_dir, 'chem_annotated.yaml')
+    gas = ct.Solution(cantera_file)
+    with open(os.path.join(working_dir, 'ct2rmg_rxn.pickle'), 'rb') as f:
+        ct2rmg_rxn = pickle.load(f)
+    
+    assert gas.n_species == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species in Cantera mechanism"
+    assert gas.n_reactions == len(ct2rmg_rxn), "Kinetic covariance matrix size does not match number of reactions in Cantera mechanism"
+    assert len(set(ct2rmg_rxn.values())) == len(reaction_list), "Reactions in Cantera mechanism do not match reactions in RMG mechanism"
+
+    # Define the problem using SALib format
+    # we need to clip the bounds to avoid infinity in the transformation to normal space.
+    confidence_interval = 0.9999
+    alpha = (1 - confidence_interval) / 2
+
+    problem = {
+        'num_vars': len(species_list) + len(reaction_list),
+        'names': [sp.to_chemkin() for sp in species_list] + 
+                 [rxn.to_chemkin(species_list, kinetics=False) for rxn in reaction_list],
+        'bounds': [[alpha, 1 - alpha]] * (len(species_list) + len(reaction_list)),  # (slightly clipped) unit uniforms, we'll handle the actual translation to valid perturbations later on
+    }
+    with open(os.path.join(morris_dir, 'problem_desc.pickle'), 'wb') as f:
+        pickle.dump(problem, f)
+
+    # Generate Morris samples (takes a minute)
+    X = SALib.sample.morris.sample(problem, N=N_SAMPLES, num_levels=NUM_LEVELS, seed=SEED)
+    np.save(os.path.join(morris_dir, 'morris_samples.npy'), X)
+
+    ezuq.util.setup_condition_dirs(morris_dir, conditions)
+
+
+def run_chunk(settings_yaml, chunk_index):
+    """Run a chunk of the morris simulations
+    Assumes the following directory structure:
+    working_dir/
+        chem_annotated.inp
+        species_dictionary.txt
+        chem_annotated.yaml
+        ct2rmg_rxn.pickle
+        thermo_covariance_matrix.npy
+        kinetic_covariance_matrix.npy
+        morris_screen/
+            problem_desc.pickle
+            morris_samples.npy
+            550K/
+                settings.yaml
+                morris_y/
+            650K/
+                settings.yaml
+                morris_y/
+            750K/
+                settings.yaml
+                morris_y/
+    """
+    
+    condition_dir = os.path.dirname(os.path.abspath(settings_yaml))
+    morris_dir = os.path.dirname(condition_dir)
+    working_dir = os.path.dirname(morris_dir)
+    results_dir = os.path.join(condition_dir, 'morris_y')
+    output_filename = os.path.join(results_dir, f'y_{chunk_index:04}.npy')
+    os.makedirs(results_dir, exist_ok=True)
+
+    # Load relevant files and check for consistency
+    with open(settings_yaml, 'r') as f:
+        settings = yaml.load(f, Loader=yaml.FullLoader)
+
+    cantera_file = os.path.join(working_dir, 'chem_annotated.yaml')
+    gas = ct.Solution(cantera_file)
+    chemkin_file = os.path.join(working_dir, 'chem_annotated.inp')
+    dict_file = os.path.join(working_dir, 'species_dictionary.txt')
+    species_list, reaction_list = rmgpy.chemkin.load_chemkin_file(chemkin_file, dict_file)
+    with open(os.path.join(working_dir, 'ct2rmg_rxn.pickle'), 'rb') as f:
+        ct2rmg_rxn = pickle.load(f)
+    ct2rmg_matrix = np.zeros((gas.n_reactions, len(reaction_list)))
+    for ct_index, rmg_index in ct2rmg_rxn.items():
+        ct2rmg_matrix[ct_index, rmg_index] = 1
+
+    thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
+    kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
+    assert len(species_list) == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species"
+    assert len(reaction_list) == kinetic_covariance_matrix.shape[0], "Kinetic covariance matrix size does not match number of reactions"
+    assert gas.n_species == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species in Cantera mechanism"
+    assert gas.n_reactions == len(ct2rmg_rxn), "Kinetic covariance matrix size does not match number of reactions in Cantera mechanism"
+    assert len(set(ct2rmg_rxn.values())) == len(reaction_list), "Reactions in Cantera mechanism do not match reactions in RMG mechanism"
+
+    with open(os.path.join(morris_dir, 'problem_desc.pickle'), 'rb') as f:
+        problem = pickle.load(f)
+    assert problem['num_vars'] == len(species_list) + len(reaction_list), "Problem description number of variables does not match number of species + reactions"
+
+    perturbations = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
+    assert perturbations.shape[0] / CHUNK_SIZE < 1000  # this exceeds the array size max we can use for SLURM 1000 array for a chunk of 1000
+    assert perturbations.shape[1] == problem['num_vars']
+
+    # -------------------- Load Morris perturbations and convert from unit uniform to actual perturbations using Nataf Transformation --------------------
+    perturbations_chunk = perturbations[chunk_index * CHUNK_SIZE: (chunk_index + 1) * CHUNK_SIZE, :]
+
+    # ------------- Thermo perturbations -------------
+    thermo_uniform_perturbations = perturbations_chunk[:, :len(species_list)]
+    L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
+    assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
+    z_thermo = scipy.stats.norm.ppf(thermo_uniform_perturbations)
+    thermo_perturbations = (L_thermo @ z_thermo.T).T * 4184  # convert RMG-UQ's kcal/mol to J/mol
+
+    # ------------- Kinetic perturbations -------------
+    kinetic_uniform_perturbations = perturbations_chunk[:, len(species_list):]
+    L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+    assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
+    z_kinetic = scipy.stats.norm.ppf(kinetic_uniform_perturbations)
+    kinetic_perturbations = (L_kinetic @ z_kinetic.T).T  # these are the perturbations in log space, so we can exponentiate to get the kinetic multipliers
+    kinetic_multipliers_rmg = np.exp(kinetic_perturbations)
+    kinetic_multipliers_ct = kinetic_multipliers_rmg @ ct2rmg_matrix.T  # convert from RMG reaction space to Cantera reaction space
+
+
+    # save copies of all thermo for faster perturbation
+    thermo_copies = []
+    for sp_index in range(gas.n_species):
+        thermo_copies.append(ct.Species().from_dict(gas.species()[sp_index].input_data.copy()))
+
+    # Run simulations
+    y = np.zeros((CHUNK_SIZE, gas.n_species))
+
+    # Cantera does well if you give it lots of CPUs for a single simulation
+    # but slows down if you try to parallelize different simulations across multiple processes
+    # so we run the simulations in serial here do the parallelize across SLURM array jobs.
+    for i in range(perturbations_chunk.shape[0]):
+
+        # perturb all the species
+        for sp_index in range(gas.n_species):
+            # random perturbation
+            if thermo_perturbations[i, sp_index] != 0:
+                perturbed_sp = ezuq.util.perturb_species_ct(gas.species()[sp_index], thermo_perturbations[i, sp_index])
+                gas.modify_species(sp_index, perturbed_sp)
+
+        # set multipliers
+        for rxn_index_ct in range(gas.n_reactions):
+            gas.set_multiplier(kinetic_multipliers_ct[i, rxn_index_ct], rxn_index_ct)
+        try:
+            # TODO add timeout here so that if a simulation is taking too long we can skip it and move on 
+            y[i, :] = run_simulation(gas, settings)
+        except ct.CanteraError:
+            y[i, :] = np.nan  # if the simulation fails, we can fill in NaNs and move on. The Morris analysis can handle some failed simulations as long as most of them work.
+
+        # Reset things
+        for sp_index in range(gas.n_species):
+            if thermo_perturbations[i, sp_index] != 0:
+                gas.modify_species(sp_index, thermo_copies[sp_index])
+        gas.set_multiplier(1.0)
+
+    np.save(output_filename, y)
+
+if __name__ == "__main__":
+    settings_yaml = sys.argv[1]
+    chunk_index = int(sys.argv[2])
+    run_chunk(settings_yaml, chunk_index)

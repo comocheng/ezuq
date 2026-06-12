@@ -3,14 +3,15 @@ import cantera as ct
 import time
 
 
-def run_simulation(gas, T_orig, P_orig, X_orig, VOLUME=9.5e-5, RESIDENCE_TIME=6.0):
-    # https://pubs.acs.org/doi/10.1021/jp309821z residence time from Cord
-    # https://www-sciencedirect-com.ezproxy.neu.edu/science/article/pii/S0010218022005703
-    # VOLUME = 7.8e-5  # Zhu was 78 cm^3, Cord was 95cm^3  # it's a repeat of Cord et al
+def run_simulation(gas, settings):
+    """Run a JSR simulation with the given gas object and settings dictionary,
+    which should contain temperature, pressure, composition, residence time, and volume"""
 
-    T = T_orig
-    P = P_orig
-    X = X_orig
+    T = settings['temperature']
+    P = settings['pressure']
+    X = settings['composition']
+    RESIDENCE_TIME = settings['residence_time']
+    VOLUME = settings['volume']
 
     gas.TPX = T, P, X
 
