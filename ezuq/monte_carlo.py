@@ -63,7 +63,7 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
     if morris_dir and i_sens is not None:
         morris_samples = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
         with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'rb') as f:
-            problem = yaml.load(f)
+            problem = yaml.load(f, Loader=yaml.FullLoader)
 
 
         # match the condition dir to the morris condition dir through the name.
