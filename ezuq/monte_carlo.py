@@ -31,6 +31,12 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
     monte_carlo_dir = os.path.join(working_dir, 'monte_carlo')
     os.makedirs(monte_carlo_dir, exist_ok=True)
 
+    if morris_dir is None:
+        if os.path.exists(os.path.join(working_dir, 'morris_screen')) and \
+                os.path.exists(os.path.join(working_dir, 'morris_screen', 'morris_samples.npy')) and \
+                os.path.exists(os.path.join(working_dir, 'morris_screen', 'problem_desc.yaml')):
+            morris_dir = os.path.join(working_dir, 'morris_screen')
+
     # load the covariance matrices
     thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
     kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
@@ -57,7 +63,7 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
     if morris_dir and i_sens is not None:
         morris_samples = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
         with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'rb') as f:
-            problem = pickle.load(f)
+            problem = yaml.load(f)
 
 
         # match the condition dir to the morris condition dir through the name.
