@@ -3,21 +3,18 @@
 # This code will need to read in the RMG uncertainty matrices.
 
 import os
+import pickle
 import sys
 
-import yaml
-from ezuq.simulation.jsr import run_simulation
-import numpy as np
-
-import rmgpy.chemkin
-
 import cantera as ct
-import pickle
-import ezuq.util
-import scipy.stats
-
+import numpy as np
+import rmgpy.chemkin
 import SALib.sample.morris
+import scipy.stats
+import yaml
 
+import ezuq.util
+from ezuq.simulation.jsr import run_simulation
 
 CHUNK_SIZE = 1000
 
@@ -61,11 +58,12 @@ def setup_runfiles(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=40
                  [rxn.to_chemkin(species_list, kinetics=False) for rxn in reaction_list],
         'bounds': [[alpha, 1 - alpha]] * (len(species_list) + len(reaction_list)),  # (slightly clipped) unit uniforms, we'll handle the actual translation to valid perturbations later on
     }
-    with open(os.path.join(morris_dir, 'problem_desc.pickle'), 'wb') as f:
-        pickle.dump(problem, f)
+    with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'w') as f:
+        yaml.dump(problem, f)
 
     # Generate Morris samples (takes a minute)
     X = SALib.sample.morris.sample(problem, N=N_SAMPLES, num_levels=NUM_LEVELS, seed=SEED)
+    print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
     np.save(os.path.join(morris_dir, 'morris_samples.npy'), X)
 
     ezuq.util.setup_condition_dirs(morris_dir, conditions)
@@ -82,7 +80,7 @@ def run_chunk(settings_yaml, chunk_index):
         thermo_covariance_matrix.npy
         kinetic_covariance_matrix.npy
         morris_screen/
-            problem_desc.pickle
+            problem_desc.yaml
             morris_samples.npy
             550K/
                 settings.yaml
@@ -125,11 +123,13 @@ def run_chunk(settings_yaml, chunk_index):
     assert gas.n_reactions == len(ct2rmg_rxn), "Kinetic covariance matrix size does not match number of reactions in Cantera mechanism"
     assert len(set(ct2rmg_rxn.values())) == len(reaction_list), "Reactions in Cantera mechanism do not match reactions in RMG mechanism"
 
-    with open(os.path.join(morris_dir, 'problem_desc.pickle'), 'rb') as f:
-        problem = pickle.load(f)
+    with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'r') as f:
+        problem = yaml.load(f, Loader=yaml.FullLoader)
     assert problem['num_vars'] == len(species_list) + len(reaction_list), "Problem description number of variables does not match number of species + reactions"
 
     perturbations = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
+    if chunk_index * CHUNK_SIZE >= perturbations.shape[0]:
+        raise ValueError(f"Chunk index {chunk_index} is out of range for number of samples {perturbations.shape[0]} with chunk size {CHUNK_SIZE}")
     assert perturbations.shape[0] / CHUNK_SIZE < 1000  # this exceeds the array size max we can use for SLURM 1000 array for a chunk of 1000
     assert perturbations.shape[1] == problem['num_vars']
 
