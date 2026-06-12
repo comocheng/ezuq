@@ -3,6 +3,8 @@
 # This code will need to read in the RMG uncertainty matrices.
 
 import os
+import re
+import glob
 import pickle
 import shutil
 import sys
@@ -193,6 +195,60 @@ def run_chunk(settings_yaml, chunk_index):
         gas.set_multiplier(1.0)
 
     np.save(output_filename, y)
+
+
+def reassemble_chunks(morris_dir, condition_dir):
+    """After all the chunks have been run, we need to reassemble the results into a single file for each condition"""
+
+    # find all settings.yaml files in the condition dirs
+
+    condition_dirs = [os.path.dirname(os.path.abspath(x)) for x in glob.glob(os.path.join(morris_dir, '*', 'settings.yaml'))]
+    for condition_dir in condition_dirs:
+        condition_name = os.path.basename(condition_dir)
+        y_files = sorted(glob.glob(os.path.join(condition_dir, 'morris_y', f'y_*.npy')))
+
+        if len(y_files) == 0:
+            print(f'Skipping {condition_name} because no files')
+            continue
+        
+        # test a sample
+        sample_y = np.load(y_files[0])
+        if sample_y.shape[0] != CHUNK_SIZE:
+            raise ValueError(f"Expected chunk size of {CHUNK_SIZE} but got {sample_y.shape[0]} in file {y_files[0]}")
+        
+        k = sample_y.shape[1]
+
+        # get the total number of samples from the morris samples file
+        morris_samples = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
+        N = morris_samples.shape[0]
+        morris_y = np.zeros((N, k))
+
+        for i in range(len(y_files)):
+            match = re.search(r'y_(\d+).npy', y_files[i])
+            index = int(match.group(1))
+            data = np.load(y_files[i])
+            assert data.shape == (CHUNK_SIZE, k)
+            try:
+                morris_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
+            except ValueError:
+                fillshape = morris_y[index * CHUNK_SIZE:, :].shape
+                morris_y[index * CHUNK_SIZE:, :] = data[:fillshape[0], :fillshape[1]]
+
+        # see how many failed
+        index_redo = set()
+        invalid_count = 0
+        for i in range(morris_y.shape[0]):
+            if np.all(morris_y[i, :] == 0):
+                invalid_count += 1
+                index_redo.add(int(i / 1000.0))
+
+        print(f'{condition_name}, {(morris_y.shape[0] - invalid_count) / morris_y.shape[0]} valid')
+        if invalid_count / morris_y.shape[0] > 0.01:
+            print(f'You should redo condition {condition_name}')
+            print(f'Redo indices: {index_redo}')
+
+        np.save(os.path.join(condition_dir, 'morris_sim_results.npy'), morris_y)
+
 
 if __name__ == "__main__":
     settings_yaml = sys.argv[1]
