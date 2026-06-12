@@ -1,0 +1,49 @@
+{% set name = "ezuq" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: PLACEHOLDER_RUN_sha256sum_ON_YOUR_TARBALL
+
+build:
+  noarch: python
+  number: 0
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  host:
+    - python >=3.9
+    - pip
+    - hatchling          # match whatever build backend you chose in pyproject.toml
+  run:
+    - python >=3.9
+    # Add your runtime dependencies here, e.g.:
+    - numpy >=1.24
+    - pandas >=2.0
+
+test:
+  imports:
+    - ezuq
+  requires:
+    - pytest
+  commands:
+    - pytest --tb=short
+
+about:
+  home: https://github.com/comocheng/ezuq
+  license: BSD-3-Clause
+  license_file: LICENSE
+  summary: "Short one-line description of ezuq"
+  description: |
+    Longer description of what ezuq does.
+    Can span multiple lines.
+  doc_url: https://github.com/comocheng/ezuq
+  dev_url: https://github.com/comocheng/ezuq
+
+extra:
+  recipe-maintainers:
+    - your-github-username              # replace with actual GitHub handle(s)
