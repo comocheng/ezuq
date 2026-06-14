@@ -63,9 +63,10 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
     # make the condition dirs, use the input conditions to name things
     ezuq.util.setup_condition_dirs(monte_carlo_dir, conditions)
     if morris_dir and i_sens is not None:
+        print('Using results of previous Morris screening')
         morris_samples = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
         with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'rb') as f:
-            problem = yaml.load(f, Loader=yaml.FullLoader)
+            morris_problem = yaml.load(f, Loader=yaml.FullLoader)
 
 
         # do cholesky decomposition to get samples in physical parameter space instead of unit uniform space
@@ -94,15 +95,21 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
 
             morris_y = np.load(morris_y_file)
 
+            nominal_values = run_simulation(gas, condition)  # get rid of nans
+            for i in range(morris_y.shape[0]):
+                if np.isnan(morris_y[i, :]).any():
+                    morris_y[i, :] = nominal_values
+
+
             # Physical result
-            Si = SALib.analyze.morris.analyze(problem, w, morris_y[:, i_sens], scaled=True)
+            Si = SALib.analyze.morris.analyze(morris_problem, w, morris_y[:, i_sens], scaled=True)
 
             # # result in independent basis
-            # Si = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
+            # Si = SALib.analyze.morris.analyze(morris_problem, z, morris_y[:, i_sens], scaled=False)
 
 
             # Rank parameter names by mean effect
-            contributions = [(x, y) for y, x in sorted(zip(Si['mu_star'].data, problem['names']))][::-1]
+            contributions = [(x, y) for y, x in sorted(zip(Si['mu_star'].data, morris_problem['names']))][::-1]
 
             # define the tolerance for considering a parameter to be irrelevant
             threshold = 0.05 * contributions[0][1]  # use 0.01 for tighter tolerance
@@ -112,6 +119,9 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
             species_names = [x.to_chemkin() for x in species_list]
             reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
             for i in range(len(contributions)):
+                if contributions[i][1] < threshold:
+                    print(f'Reduced to {i} params')
+                    break
                 name = contributions[i][0]
                 if name in species_names:
                     g_params.append(species_names.index(name))
@@ -120,10 +130,6 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
                 else:
                     raise ValueError(f'could not identify parameter with name {name}')
                 
-                if contributions[i][1] < threshold:
-                    print(f'Reduced to {i} params')
-                    break
-
             # save the problem description for this condition. Different conditions will have difference reduced parameter sets
             monte_carlo_condition_dir = os.path.join(monte_carlo_dir, os.path.basename(condition["name"]))
             problem = {

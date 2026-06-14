@@ -257,8 +257,6 @@ def _setup_runfiles_intermediate(working_dir, conditions, N_SAMPLES=100, NUM_LEV
     # shutil.copyfile(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'SLURM', 'run_morris.sh'), os.path.join(morris_dir, 'run_morris.sh'))
 
 
-
-
 def reassemble_chunks(morris_dir):
     """After all the chunks have been run, we need to reassemble the results into a single file for each condition"""
 
