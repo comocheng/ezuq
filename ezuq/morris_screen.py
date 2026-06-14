@@ -197,6 +197,68 @@ def run_chunk(settings_yaml, chunk_index):
     np.save(output_filename, y)
 
 
+
+def _setup_runfiles_intermediate(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=400):
+    """Like setup_runfiles, but for the intermediate thermo/kinetic parameters in the model
+
+    working_dir should be the directory where the RMG and Cantera mechanisms are saved.
+    Also requires sigma_qq_kinetics.npy, sigma_qq_thermo.npy, dG_dq.npy, and dlnk_dq to be in working_dir
+    """
+    raise NotImplementedError()
+
+    # morris_q_dir = os.path.join(working_dir, 'morris_screen_q')
+    # os.makedirs(morris_q_dir, exist_ok=True)
+
+    # # load the covariance matrices
+    # sigma_qq_thermo = np.load(os.path.join(working_dir, 'sigma_qq_thermo.npy'))
+    # sigma_qq_kinetics = np.load(os.path.join(working_dir, 'sigma_qq_kinetics.npy'))
+
+    # dG_dq = np.load(os.path.join(working_dir, 'dG_dq.npy'))
+    # dlnk_dq = np.load(os.path.join(working_dir, 'dlnk_dq.npy'))
+
+    # # confirm this matches the RMG mechanism
+    # chemkin_file = os.path.join(working_dir, 'chem_annotated.inp')
+    # dictionary_file = os.path.join(working_dir, 'species_dictionary.txt')
+    # species_list, reaction_list = rmgpy.chemkin.load_chemkin_file(chemkin_file, dictionary_file)
+    # assert len(species_list) == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species"
+    # assert len(reaction_list) == kinetic_covariance_matrix.shape[0], "Kinetic covariance matrix size does not match number of reactions"
+
+    # cantera_file = os.path.join(working_dir, 'chem_annotated.yaml')
+    # gas = ct.Solution(cantera_file)
+    # with open(os.path.join(working_dir, 'ct2rmg_rxn.pickle'), 'rb') as f:
+    #     ct2rmg_rxn = pickle.load(f)
+    
+    # assert gas.n_species == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species in Cantera mechanism"
+    # assert gas.n_reactions == len(ct2rmg_rxn), "Kinetic covariance matrix size does not match number of reactions in Cantera mechanism"
+    # assert len(set(ct2rmg_rxn.values())) == len(reaction_list), "Reactions in Cantera mechanism do not match reactions in RMG mechanism"
+
+    # # Define the problem using SALib format
+    # # we need to clip the bounds to avoid infinity in the transformation to normal space.
+    # confidence_interval = 0.95
+    # alpha = (1 - confidence_interval) / 2
+
+    # problem = {
+    #     'num_vars': len(species_list) + len(reaction_list),
+    #     'names': [sp.to_chemkin() for sp in species_list] + 
+    #              [rxn.to_chemkin(species_list, kinetics=False) for rxn in reaction_list],
+    #     'bounds': [[alpha, 1 - alpha]] * (len(species_list) + len(reaction_list)),  # (slightly clipped) unit uniforms, we'll handle the actual translation to valid perturbations later on
+    # }
+    # with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'w') as f:
+    #     yaml.dump(problem, f)
+
+    # # Generate Morris samples (takes a minute)
+    # X = SALib.sample.morris.sample(problem, N=N_SAMPLES, num_levels=NUM_LEVELS, seed=SEED)
+    # print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
+    # np.save(os.path.join(morris_dir, 'morris_samples.npy'), X)
+
+    # ezuq.util.setup_condition_dirs(morris_dir, conditions)
+
+    # # copy the slurm script into the Morris dir
+    # shutil.copyfile(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'SLURM', 'run_morris.sh'), os.path.join(morris_dir, 'run_morris.sh'))
+
+
+
+
 def reassemble_chunks(morris_dir):
     """After all the chunks have been run, we need to reassemble the results into a single file for each condition"""
 

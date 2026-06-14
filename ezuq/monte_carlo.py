@@ -11,6 +11,7 @@ import numpy as np
 import yaml
 import cantera as ct
 import rmgpy.chemkin
+import scipy.stats
 
 import SALib.analyze.morris
 
@@ -67,6 +68,19 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
             problem = yaml.load(f, Loader=yaml.FullLoader)
 
 
+        # do cholesky decomposition to get samples in physical parameter space instead of unit uniform space
+        z = scipy.stats.norm.ppf(morris_samples)
+        z_thermo = z[:, :gas.n_species]
+        z_kinetic = z[:, gas.n_species:]
+
+        L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
+        L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+
+        w_thermo = (L_thermo @ z_thermo.T).T
+        w_kinetic = (L_kinetic @ z_kinetic.T).T
+        w = np.concatenate((w_thermo, w_kinetic), axis=1)
+
+
         # match the condition dir to the morris condition dir through the name.
         for condition in conditions:
             morris_settings_yaml = os.path.join(morris_dir, condition["name"], 'settings.yaml')
@@ -79,7 +93,13 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
                 continue
 
             morris_y = np.load(morris_y_file)
-            Si = SALib.analyze.morris.analyze(problem, morris_samples, morris_y[:, i_sens])
+
+            # Physical result
+            Si = SALib.analyze.morris.analyze(problem, w, morris_y[:, i_sens], scaled=True)
+
+            # # result in independent basis
+            # Si = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
+
 
             # Rank parameter names by mean effect
             contributions = [(x, y) for y, x in sorted(zip(Si['mu_star'].data, problem['names']))][::-1]
