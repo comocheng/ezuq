@@ -1,0 +1,539 @@
+generator: ck2yaml
+input-files: [chem_annotated.inp]
+cantera-version: 3.1.0
+date: Sun, 14 Jun 2026 19:41:46 -0400
+
+units: {length: cm, time: s, quantity: mol, activation-energy: 
+    kcal/mol}
+
+phases:
+- name: gas
+  thermo: ideal-gas
+  elements: [Ar, C, H, He, N, Ne, O]
+  species: [Ar, Ne, N2, ethane(1), O2(2), H(3), O(4), OH(5), H2(6), 
+      H2O(7), He(8), HO2(9), H2O2(10), 'C[CH2](14)', C2H4(22)]
+  kinetics: gas
+  state: {T: 300.0, P: 1 atm}
+
+species:
+- name: Ar
+  composition: {Ar: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 6000.0]
+    data:
+    - [2.5, 0.0, 0.0, 0.0, 0.0, -745.375, 4.37967]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' Ar'
+- name: Ne
+  composition: {Ne: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 6000.0]
+    data:
+    - [2.5, 0.0, 0.0, 0.0, 0.0, -745.375, 3.35532]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' Ne'
+- name: N2
+  composition: {N: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 6000.0]
+    data:
+    - [3.53101, -1.23661e-04, -5.02999e-07, 2.43531e-09, -1.40881e-12, 
+        -1046.98, 2.96747]
+    - [2.95258, 1.3969e-03, -4.92632e-07, 7.8601e-11, -4.60755e-15, 
+        -923.949, 5.87189]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' N2'
+- name: ethane(1)
+  composition: {C: 2, H: 6}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 954.51, 5000.0]
+    data:
+    - [3.78033462, -3.2426248e-03, 5.52380397e-05, -6.38580942e-08, 
+        2.28636966e-11, -1.16203409e+04, 5.21033695]
+    - [4.58983307, 0.0141507715, -4.75962003e-06, 8.60293917e-10, 
+        -6.21716348e-14, -1.27217663e+04, -3.61740116]
+    note: 'Thermo group additivity estimation: group(Cs-CsHHH) + group(Cs-CsHHH)'
+  note: ' ethane(1)'
+- name: O2(2)
+  composition: {O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1074.55, 5000.0]
+    data:
+    - [3.53732243, -1.21571647e-03, 5.31620254e-06, -4.89446434e-09, 
+        1.45846258e-12, -1038.58849, 4.68368183]
+    - [3.15382081, 1.67804371e-03, -7.69974236e-07, 1.51275462e-10, 
+        -1.08782414e-14, -1040.81728, 6.16755832]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' O2(2)'
+- name: H(3)
+  composition: {H: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 4879.8, 5000.0]
+    data:
+    - [2.5, -3.01680531e-12, 3.74582141e-15, -1.50856878e-18, 
+        1.86626471e-22, 2.54742178e+04, -0.444972899]
+    - [4.28461071, -1.45494649e-03, 4.44804306e-07, -6.04359642e-11, 
+        3.07921551e-15, 2.37230923e+04, -11.8931307]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' H(3)'
+- name: O(4)
+  composition: {O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 4879.8, 5000.0]
+    data:
+    - [2.5, -3.01680531e-12, 3.74582141e-15, -1.50856878e-18, 
+        1.86626471e-22, 2.92302441e+04, 5.12616427]
+    - [4.28461071, -1.45494649e-03, 4.44804306e-07, -6.04359642e-11, 
+        3.07921551e-15, 2.74791187e+04, -6.32199355]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' O(4)'
+- name: OH(5)
+  composition: {H: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1145.76, 5000.0]
+    data:
+    - [3.51456839, 2.92734292e-05, -5.32150598e-07, 1.01947521e-09, 
+        -3.85939405e-13, 3414.25418, 2.10434756]
+    - [3.07193724, 6.04019839e-04, -1.3980593e-08, -2.13440813e-11, 
+        2.48061367e-15, 3579.38792, 4.57801469]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' OH(5)'
+- name: H2(6)
+  composition: {H: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1959.07, 5000.0]
+    data:
+    - [3.43536393, 2.12711953e-04, -2.78628671e-07, 3.40270013e-10, 
+        -7.76039045e-14, -1031.35983, -3.90841661]
+    - [2.78818509, 5.87615921e-04, 1.5902213e-07, -5.52762536e-11, 
+        4.3432812e-15, -596.155632, 0.112618494]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' H2(6)'
+- name: H2O(7)
+  composition: {H: 2, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1130.23, 5000.0]
+    data:
+    - [4.05763524, -7.87929225e-04, 2.90875322e-06, -1.47516271e-09, 
+        2.12832915e-13, -3.02815866e+04, -0.311361934]
+    - [2.84325454, 2.75107882e-03, -7.81027793e-07, 1.07242789e-10, 
+        -5.79385325e-15, -2.99586146e+04, 5.91039666]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' H2O(7)'
+- name: He(8)
+  composition: {He: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 6000.0]
+    data:
+    - [2.5, 0.0, 0.0, 0.0, 0.0, -745.375, 0.928724]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' He(8)'
+- name: HO2(9)
+  composition: {H: 1, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 932.15, 5000.0]
+    data:
+    - [4.04594488, -1.73464779e-03, 1.03766518e-05, -1.02202522e-08, 
+        3.34908581e-12, -986.754245, 4.63581294]
+    - [3.21023857, 3.67941991e-03, -1.27701572e-06, 2.18045259e-10, 
+        -1.46337935e-14, -910.368497, 8.1829188]
+    note: 'Thermo group additivity estimation: group(O2s-OsH) + group(O2s-OsH)
+      + radical(HOOJ)'
+  note: ' HO2(9)'
+- name: H2O2(10)
+  composition: {H: 2, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 908.87, 5000.0]
+    data:
+    - [3.73136061, 3.35067714e-03, 9.35045149e-06, -1.52101308e-08, 
+        6.41593098e-12, -1.77211709e+04, 5.4590992]
+    - [5.41578065, 2.61009268e-03, -4.39898683e-07, 4.91103613e-11, 
+        -3.35202076e-15, -1.83029497e+04, -4.02244574]
+    note: 'Thermo group additivity estimation: group(O2s-OsH) + group(O2s-OsH)'
+  note: ' H2O2(10)'
+- name: C[CH2](14)
+  composition: {C: 2, H: 5}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 900.31, 5000.0]
+    data:
+    - [3.82184856, -3.43376314e-03, 5.0926334e-05, -6.20220235e-08, 
+        2.37077381e-11, 1.30660124e+04, 7.61638915]
+    - [5.1561757, 9.4312837e-03, -1.81949426e-06, 2.21204013e-10, 
+        -1.43488224e-14, 1.20640959e+04, -2.91080147]
+    note: 'Thermo group additivity estimation: group(Cs-CsHHH) + group(Cs-CsHHH)
+      + radical(CCJ)'
+  note: ' C[CH2](14)'
+- name: C2H4(22)
+  composition: {C: 2, H: 4}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 940.45, 5000.0]
+    data:
+    - [3.97973264, -7.57545379e-03, 5.5296787e-05, -6.36214316e-08, 
+        2.31763871e-11, 5077.46136, 4.04626943]
+    - [5.20303125, 7.82435984e-03, -2.12679614e-06, 3.79681495e-10, 
+        -2.94663143e-14, 3936.266, -6.62431874]
+    note: 'Thermo group additivity estimation: group(Cds-CdsHH) + group(Cds-CdsHH)'
+  note: ' C=C(22)'
+
+reactions:
+- equation: O2(2) + H(3) <=> O(4) + OH(5)  # Reaction 1
+  rate-constant: {A: 1.04e+14, b: 0.0, Ea: 15.286}
+  note: |
+    Reaction index: Chemkin #1; RMG #1
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: O2(2), OH(5); H(3), O(4); 
+- equation: O(4) + H2(6) <=> H(3) + OH(5)  # Reaction 2
+  duplicate: true
+  rate-constant: {A: 3.818e+12, b: 0.0, Ea: 7.948}
+  note: |
+    Reaction index: Chemkin #2; RMG #2
+    Library reaction: BurkeH2O2inArHe
+- equation: O(4) + H2(6) <=> H(3) + OH(5)  # Reaction 3
+  duplicate: true
+  rate-constant: {A: 8.792e+14, b: 0.0, Ea: 19.17}
+  note: |
+    Reaction index: Chemkin #3; RMG #2
+    Library reaction: BurkeH2O2inArHe
+- equation: OH(5) + H2(6) <=> H(3) + H2O(7)  # Reaction 4
+  rate-constant: {A: 2.16e+08, b: 1.51, Ea: 3.43}
+  note: |
+    Reaction index: Chemkin #4; RMG #3
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: OH(5), H2O(7); H2(6), H(3); 
+- equation: OH(5) + OH(5) <=> O(4) + H2O(7)  # Reaction 5
+  rate-constant: {A: 3.34e+04, b: 2.42, Ea: -1.93}
+  note: |
+    Reaction index: Chemkin #5; RMG #4
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: OH(5), H2O(7); OH(5), O(4); 
+- equation: H2(6) + M <=> H(3) + H(3) + M  # Reaction 6
+  type: three-body
+  rate-constant: {A: 4.577e+19, b: -1.4, Ea: 104.38}
+  efficiencies: {H2(6): 2.5, H2O(7): 12.0, Ar: 0.0, He(8): 0.0}
+  note: |
+    Reaction index: Chemkin #6; RMG #5
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2(6), H(3); H2(6), H(3); 
+- equation: Ar + H2(6) <=> Ar + H(3) + H(3)  # Reaction 7
+  rate-constant: {A: 5.84e+18, b: -1.1, Ea: 104.38}
+  note: |
+    Reaction index: Chemkin #7; RMG #6
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2(6), H(3); Ar, Ar; Ar, H(3); 
+- equation: He(8) + H2(6) <=> He(8) + H(3) + H(3)  # Reaction 8
+  rate-constant: {A: 5.84e+18, b: -1.1, Ea: 104.38}
+  note: |
+    Reaction index: Chemkin #8; RMG #7
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2(6), H(3); He(8), He(8); He(8), H(3); 
+- equation: O(4) + O(4) + M <=> O2(2) + M  # Reaction 9
+  type: three-body
+  rate-constant: {A: 6.165e+15, b: -0.5, Ea: 0.0}
+  efficiencies: {H2(6): 2.5, H2O(7): 12.0, Ar: 0.0, He(8): 0.0}
+  note: |
+    Reaction index: Chemkin #9; RMG #8
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: O(4), O2(2); O(4), O2(2); 
+- equation: Ar + O(4) + O(4) <=> Ar + O2(2)  # Reaction 10
+  rate-constant: {A: 1.886e+13, b: 0.0, Ea: -1.788}
+  note: |
+    Reaction index: Chemkin #10; RMG #9
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: O(4), O2(2); Ar, Ar; O(4), Ar; 
+- equation: He(8) + O(4) + O(4) <=> He(8) + O2(2)  # Reaction 11
+  rate-constant: {A: 1.886e+13, b: 0.0, Ea: -1.788}
+  note: |
+    Reaction index: Chemkin #11; RMG #10
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: O(4), O2(2); He(8), He(8); O(4), He(8); 
+- equation: O(4) + H(3) + M <=> OH(5) + M  # Reaction 12
+  type: three-body
+  rate-constant: {A: 4.714e+18, b: -1.0, Ea: 0.0}
+  efficiencies: {H2(6): 2.5, H2O(7): 12.0, Ar: 0.75, He(8): 0.75}
+  note: |
+    Reaction index: Chemkin #12; RMG #11
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: O(4), OH(5); H(3), OH(5); 
+- equation: H2O(7) + M <=> H(3) + OH(5) + M  # Reaction 13
+  type: three-body
+  rate-constant: {A: 6.064e+27, b: -3.322, Ea: 120.79}
+  efficiencies: {N2: 2.0, H2(6): 3.0, H2O(7): 0.0, O2(2): 1.5, He(8): 
+      1.1}
+  note: |
+    Reaction index: Chemkin #13; RMG #12
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2O(7), H(3); H2O(7), OH(5); 
+- equation: H2O(7) + H2O(7) <=> H(3) + OH(5) + H2O(7)  # Reaction 14
+  rate-constant: {A: 1.006e+26, b: -2.44, Ea: 120.18}
+  note: |
+    Reaction index: Chemkin #14; RMG #13
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2O(7), H2O(7); H2O(7), H(3); H2O(7), OH(5); 
+- equation: O2(2) + H(3) (+M) <=> HO2(9) (+M)  # Reaction 15
+  type: falloff
+  low-P-rate-constant: {A: 9.042e+19, b: -1.5, Ea: 0.492}
+  high-P-rate-constant: {A: 4.651e+12, b: 0.44, Ea: 0.0}
+  Troe: {A: 0.5, T3: 1.0e-30, T1: 1.0e+30}
+  efficiencies: {H2(6): 3.0, O2(2): 1.1, H2O(7): 21.0, He(8): 1.2, N2: 
+      1.5}
+  note: |
+    Reaction index: Chemkin #15; RMG #14
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: O2(2), HO2(9); H(3), HO2(9); 
+- equation: H(3) + HO2(9) <=> O2(2) + H2(6)  # Reaction 16
+  rate-constant: {A: 2.75e+06, b: 2.09, Ea: -1.451}
+  note: |
+    Reaction index: Chemkin #16; RMG #15
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: HO2(9), O2(2); H(3), H2(6); 
+- equation: H(3) + HO2(9) <=> OH(5) + OH(5)  # Reaction 17
+  rate-constant: {A: 7.079e+13, b: 0.0, Ea: 0.295}
+  note: |
+    Reaction index: Chemkin #17; RMG #16
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: HO2(9), OH(5); H(3), OH(5); 
+- equation: O(4) + HO2(9) <=> O2(2) + OH(5)  # Reaction 18
+  rate-constant: {A: 2.85e+10, b: 1.0, Ea: -0.724}
+  note: |
+    Reaction index: Chemkin #18; RMG #17
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: HO2(9), O2(2); O(4), OH(5); 
+- equation: OH(5) + HO2(9) <=> O2(2) + H2O(7)  # Reaction 19
+  rate-constant: {A: 2.89e+13, b: 0.0, Ea: -0.497}
+  note: |
+    Reaction index: Chemkin #19; RMG #18
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: HO2(9), O2(2); OH(5), H2O(7); 
+- equation: HO2(9) + HO2(9) <=> O2(2) + H2O2(10)  # Reaction 20
+  duplicate: true
+  rate-constant: {A: 4.2e+14, b: 0.0, Ea: 11.982}
+  note: |
+    Reaction index: Chemkin #20; RMG #19
+    Library reaction: BurkeH2O2inArHe
+- equation: HO2(9) + HO2(9) <=> O2(2) + H2O2(10)  # Reaction 21
+  duplicate: true
+  rate-constant: {A: 1.3e+11, b: 0.0, Ea: -1.629}
+  note: |
+    Reaction index: Chemkin #21; RMG #19
+    Library reaction: BurkeH2O2inArHe
+- equation: H2O2(10) (+M) <=> OH(5) + OH(5) (+M)  # Reaction 22
+  type: falloff
+  low-P-rate-constant: {A: 2.49e+24, b: -2.3, Ea: 48.749}
+  high-P-rate-constant: {A: 2.0e+12, b: 0.9, Ea: 48.749}
+  Troe: {A: 0.43, T3: 1.0e-30, T1: 1.0e+30}
+  efficiencies: {H2(6): 3.7, H2O(7): 7.5, O2(2): 1.2, N2: 1.5, 
+      H2O2(10): 7.7, He(8): 0.65}
+  note: |
+    Reaction index: Chemkin #22; RMG #20
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2O2(10), OH(5); H2O2(10), OH(5); 
+- equation: H(3) + H2O2(10) <=> OH(5) + H2O(7)  # Reaction 23
+  rate-constant: {A: 2.41e+13, b: 0.0, Ea: 3.97}
+  note: |
+    Reaction index: Chemkin #23; RMG #21
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2O2(10), H2O(7); H(3), OH(5); 
+- equation: H(3) + H2O2(10) <=> HO2(9) + H2(6)  # Reaction 24
+  rate-constant: {A: 4.82e+13, b: 0.0, Ea: 7.95}
+  note: |
+    Reaction index: Chemkin #24; RMG #22
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2O2(10), HO2(9); H(3), H2(6); 
+- equation: O(4) + H2O2(10) <=> OH(5) + HO2(9)  # Reaction 25
+  rate-constant: {A: 9.55e+06, b: 2.0, Ea: 3.97}
+  note: |
+    Reaction index: Chemkin #25; RMG #23
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2O2(10), HO2(9); O(4), OH(5); 
+- equation: OH(5) + H2O2(10) <=> HO2(9) + H2O(7)  # Reaction 26
+  duplicate: true
+  rate-constant: {A: 1.74e+12, b: 0.0, Ea: 0.318}
+  note: |
+    Reaction index: Chemkin #26; RMG #24
+    Library reaction: BurkeH2O2inArHe
+- equation: OH(5) + H2O2(10) <=> HO2(9) + H2O(7)  # Reaction 27
+  duplicate: true
+  rate-constant: {A: 7.59e+13, b: 0.0, Ea: 7.27}
+  note: |
+    Reaction index: Chemkin #27; RMG #24
+    Library reaction: BurkeH2O2inArHe
+- equation: H(3) + HO2(9) <=> O(4) + H2O(7)  # Reaction 28
+  rate-constant: {A: 2.9e+08, b: 1.55, Ea: -0.16}
+  note: |
+    Reaction index: Chemkin #28; RMG #25
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: HO2(9), H2O(7); H(3), O(4); 
+- equation: H(3) + HO2(9) + M <=> H2O2(10) + M  # Reaction 29
+  type: three-body
+  rate-constant: {A: 6.0e+14, b: 1.25, Ea: -0.27}
+  note: |
+    Reaction index: Chemkin #29; RMG #26
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H(3), H2O2(10); HO2(9), H2O2(10); 
+- equation: OH(5) + OH(5) <=> O2(2) + H2(6)  # Reaction 30
+  rate-constant: {A: 2.0e+11, b: 0.51, Ea: 50.5}
+  note: |
+    Reaction index: Chemkin #30; RMG #27
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: OH(5), O2(2); OH(5), H2(6); 
+- equation: O(4) + H2O(7) <=> O2(2) + H2(6)  # Reaction 31
+  rate-constant: {A: 1.07e+10, b: 0.97, Ea: 68.7}
+  note: |
+    Reaction index: Chemkin #31; RMG #28
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2O(7), O2(2); O(4), H2(6); 
+- equation: O(4) + H2O2(10) <=> O2(2) + H2O(7)  # Reaction 32
+  rate-constant: {A: 8.43e+11, b: 0.0, Ea: 3.97}
+  note: |
+    Reaction index: Chemkin #32; RMG #29
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: H2O2(10), O2(2); O(4), H2O(7); 
+- equation: O(4) + OH(5) + M <=> HO2(9) + M  # Reaction 33
+  type: three-body
+  rate-constant: {A: 1.0e+15, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #33; RMG #30
+    Library reaction: BurkeH2O2inArHe
+    Flux pairs: O(4), HO2(9); OH(5), HO2(9); 
+- equation: O2(2) + ethane(1) <=> HO2(9) + C[CH2](14)  # Reaction 34
+  rate-constant: {A: 2.92e+07, b: 1.9, Ea: 49.548}
+  note: |
+    Reaction index: Chemkin #34; RMG #37
+    Template reaction: H_Abstraction
+    Flux pairs: O2(2), HO2(9); ethane(1), C[CH2](14); 
+    Matched reaction 214 C2H6 + O2 <=> C2H5b + HO2 in H_Abstraction/training
+    This reaction matched rate rule [C/H3/Cs\H3;O2b]
+    family: H_Abstraction
+- equation: H(3) + ethane(1) <=> H2(6) + C[CH2](14)  # Reaction 35
+  rate-constant: {A: 1.15e+08, b: 1.9, Ea: 7.53}
+  note: |
+    Reaction index: Chemkin #35; RMG #38
+    Template reaction: H_Abstraction
+    Flux pairs: H(3), H2(6); ethane(1), C[CH2](14); 
+    Matched reaction 210 C2H6 + H <=> C2H5b + H2_p in H_Abstraction/training
+    This reaction matched rate rule [C/H3/Cs\H3;H_rad]
+    family: H_Abstraction
+- equation: O(4) + ethane(1) <=> OH(5) + C[CH2](14)  # Reaction 36
+  rate-constant: {A: 1.8e+05, b: 2.8, Ea: 5.8}
+  note: |
+    Reaction index: Chemkin #36; RMG #40
+    Template reaction: H_Abstraction
+    Flux pairs: O(4), OH(5); ethane(1), C[CH2](14); 
+    Matched reaction 211 C2H6 + O_rad <=> C2H5b + OH_p23 in H_Abstraction/training
+    This reaction matched rate rule [C/H3/Cs\H3;O_atom_triplet]
+    family: H_Abstraction
+- equation: OH(5) + ethane(1) <=> H2O(7) + C[CH2](14)  # Reaction 37
+  rate-constant: {A: 1.61e+06, b: 2.224, Ea: 0.741}
+  note: |
+    Reaction index: Chemkin #37; RMG #42
+    Template reaction: H_Abstraction
+    Flux pairs: OH(5), H2O(7); ethane(1), C[CH2](14); 
+    Matched reaction 212 C2H6 + OH <=> C2H5b + H2O_p in H_Abstraction/training
+    This reaction matched rate rule [C/H3/Cs\H3;O_pri_rad]
+    family: H_Abstraction
+- equation: HO2(9) + ethane(1) <=> H2O2(10) + C[CH2](14)  # Reaction 38
+  rate-constant: {A: 26.0, b: 3.37, Ea: 15.9}
+  note: |
+    Reaction index: Chemkin #38; RMG #44
+    Template reaction: H_Abstraction
+    Flux pairs: HO2(9), H2O2(10); ethane(1), C[CH2](14); 
+    Matched reaction 213 C2H6 + HO2_r3 <=> C2H5b + H2O2_p13 in H_Abstraction/training
+    This reaction matched rate rule [C/H3/Cs\H3;O_rad/NonDeO]
+    family: H_Abstraction
+- equation: O2(2) + C[CH2](14) <=> HO2(9) + C2H4(22)  # Reaction 39
+  rate-constant: {A: 4.338e+13, b: 0.0, Ea: 15.99}
+  note: |
+    Reaction index: Chemkin #39; RMG #49
+    Template reaction: Disproportionation
+    Flux pairs: C[CH2](14), C2H4(22); O2(2), HO2(9); 
+    Matched reaction 2 C2H5 + O2 <=> HO2 + C2H4 in Disproportionation/training
+    This reaction matched rate rule [Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_N-5R!H-u0_Sp-2R!H-1CNS]
+    family: Disproportionation
+- equation: H(3) + C[CH2](14) <=> H2(6) + C2H4(22)  # Reaction 40
+  rate-constant: {A: 1.083e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #40; RMG #52
+    Template reaction: Disproportionation
+    Flux pairs: C[CH2](14), C2H4(22); H(3), H2(6); 
+    Matched reaction 4 H + C2H5 <=> H2 + C2H4 in Disproportionation/training
+    This reaction matched rate rule [Root_4R->H_Sp-2R!H-1R!H_2R!H-u1_N-1R!H->O_1CN->C_2R!H->C]
+    family: Disproportionation
+- equation: O(4) + C[CH2](14) <=> OH(5) + C2H4(22)  # Reaction 41
+  rate-constant: {A: 9.03e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #41; RMG #55
+    Template reaction: Disproportionation
+    Flux pairs: C[CH2](14), C2H4(22); O(4), OH(5); 
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_N-1R!H->O_Sp-2R!H-1CNS_1CNS->C_2R!H->C in family Disproportionation.
+    Multiplied by reaction path degeneracy 3.0
+- equation: OH(5) + C[CH2](14) <=> H2O(7) + C2H4(22)  # Reaction 42
+  rate-constant: {A: 7.23e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #42; RMG #57
+    Template reaction: Disproportionation
+    Flux pairs: C[CH2](14), C2H4(22); OH(5), H2O(7); 
+    Matched reaction 13 HO + C2H5 <=> H2O + C2H4 in Disproportionation/training
+    This reaction matched rate rule [Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Sp-2R!H-1CNS_1CNS->C_2R!H->C]
+    family: Disproportionation
+- equation: HO2(9) + C[CH2](14) <=> H2O2(10) + C2H4(22)  # Reaction 43
+  rate-constant: {A: 1.25307e+08, b: 1.719, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #43; RMG #60
+    Template reaction: Disproportionation
+    Flux pairs: C[CH2](14), C2H4(22); HO2(9), H2O2(10); 
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_5R!H-u0 in family Disproportionation.
+    Multiplied by reaction path degeneracy 3.0
+- equation: C[CH2](14) + C[CH2](14) <=> C2H4(22) + ethane(1)  # Reaction 44
+  rate-constant: {A: 6.9e+13, b: -0.35, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #44; RMG #63
+    Template reaction: Disproportionation
+    Flux pairs: C[CH2](14), C2H4(22); C[CH2](14), ethane(1); 
+    Matched reaction 6 C2H5 + C2H5-2 <=> C2H6 + C2H4 in Disproportionation/training
+    This reaction matched rate rule [Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_N-5R!H->O_Sp-5CS-4CCNSS_1CNS->C]
+    family: Disproportionation
+- equation: H(3) + C2H4(22) <=> C[CH2](14)  # Reaction 45
+  type: Chebyshev
+  temperature-range: [300.0, 3000.0]
+  pressure-range: [0.001 atm, 98.692 atm]
+  data:
+  - [11.98, 0.929, -0.1782, 0.01723]
+  - [-0.1712, 0.9822, -0.01354, -0.03959]
+  - [-0.4483, 0.3472, 0.07146, -0.01204]
+  - [-0.2059, 0.07519, 0.03949, 6.965e-03]
+  - [-0.05856, -9.688e-03, 8.655e-03, 6.071e-03]
+  - [4.027e-03, -0.02061, -3.27e-03, 1.364e-03]
+  note: |
+    Reaction index: Chemkin #45; RMG #117
+    PDep reaction: PDepNetwork #13
+    Flux pairs: H(3), C[CH2](14); C2H4(22), C[CH2](14); 
+- equation: O2(2) + C[CH2](14) <=> HO2(9) + C2H4(22)  # Reaction 46
+  type: Chebyshev
+  temperature-range: [300.0, 3000.0]
+  pressure-range: [0.001 atm, 98.692 atm]
+  data:
+  - [9.525, -0.8969, -0.2362, -5.337e-03]
+  - [1.609, 0.8773, 0.1599, -0.03695]
+  - [0.09976, 0.09462, 0.07232, 0.01967]
+  - [-0.02887, -0.07356, 2.182e-05, 0.01251]
+  - [-0.03246, -0.04273, -0.0153, 5.976e-04]
+  - [-0.01975, -4.379e-03, -7.1e-03, -2.463e-03]
+  note: |
+    Reaction index: Chemkin #46; RMG #81
+    PDep reaction: PDepNetwork #6
+    Flux pairs: C[CH2](14), C2H4(22); O2(2), HO2(9); 
