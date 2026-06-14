@@ -2,7 +2,8 @@
 
 
 import os
-
+import re
+import glob
 import sys
 import pickle
 import shutil
@@ -87,7 +88,7 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
             threshold = 0.05 * contributions[0][1]  # use 0.01 for tighter tolerance
             k_params = []
             g_params = []
-            
+
             species_names = [x.to_chemkin() for x in species_list]
             reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
             for i in range(len(contributions)):
@@ -147,7 +148,7 @@ def run_chunk(settings_yaml, chunk_index):
                 settings.yaml
                 monte_carlo_y/
     """
-    
+
     condition_dir = os.path.dirname(os.path.abspath(settings_yaml))
     monte_carlo_dir = os.path.dirname(condition_dir)
     working_dir = os.path.dirname(monte_carlo_dir)
@@ -195,7 +196,7 @@ def run_chunk(settings_yaml, chunk_index):
 
         thermo_perturbations = rng.multivariate_normal(mean=np.zeros(thermo_covariance_matrix.shape[0]), cov=thermo_covariance_matrix, size=CHUNK_SIZE) * 4184  # convert to J/mol
         kinetic_perturbations = rng.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix.shape[0]), cov=kinetic_covariance_matrix, size=CHUNK_SIZE)
-    
+
     else:
         with open(problem_desc_file, 'r') as f:
             problem = yaml.load(f, Loader=yaml.FullLoader)
@@ -205,7 +206,7 @@ def run_chunk(settings_yaml, chunk_index):
 
         # This is only okay if there are no off-diagonals
         # count the off_diagonals
-        if not util.is_diagonal(thermo_covariance_matrix) or not util.is_diagonal(kinetic_covariance_matrix)
+        if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
             raise NotImplementedError("Parameter reduction with non-diagonal covariance matrices is not implemented yet.")
 
         # reduce the thermo covariance matrix to the species in g_params
@@ -255,6 +256,48 @@ def run_chunk(settings_yaml, chunk_index):
         gas.set_multiplier(1.0)
 
     np.save(output_filename, y)
+
+def reassemble_chunks(condition_dir):
+    """After all the chunks have been run, we need to reassemble the results into a single file for each condition"""
+
+    condition_name = os.path.basename(condition_dir)
+    y_files = sorted(glob.glob(os.path.join(condition_dir, 'monte_carlo_y', f'y_*.npy')))
+
+    if len(y_files) == 0:
+        raise ValueError('No files found')
+
+    # test a sample
+    sample_y = np.load(y_files[0])
+    if sample_y.shape[0] != CHUNK_SIZE:
+        raise ValueError(f"Expected chunk size of {CHUNK_SIZE} but got {sample_y.shape[0]} in file {y_files[0]}")
+
+    k = sample_y.shape[1]
+
+    # get the total number of samples from the file count
+    N = CHUNK_SIZE * len(y_files)
+    monte_carlo_y = np.zeros((N, k))
+
+    for i in range(len(y_files)):
+        match = re.search(r'y_(\d+).npy', y_files[i])
+        index = int(match.group(1))
+        data = np.load(y_files[i])
+        assert data.shape == (CHUNK_SIZE, k)
+        monte_carlo_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
+
+    # see how many failed
+    index_redo = set()
+    invalid_count = 0
+    for i in range(monte_carlo_y.shape[0]):
+        if np.all(monte_carlo_y[i, :] == 0):
+            invalid_count += 1
+            index_redo.add(int(i / 1000.0))
+
+    print(f'{condition_name}, {(monte_carlo_y.shape[0] - invalid_count) / monte_carlo_y.shape[0] * 100:.2f} % valid')
+    if invalid_count / monte_carlo_y.shape[0] > 0.01:
+        print(f'You should redo condition {condition_name}')
+        print(f'Redo indices: {index_redo}')
+
+    np.save(os.path.join(condition_dir, 'monte_carlo_results.npy'), monte_carlo_y)
 
 
 if __name__ == "__main__":
