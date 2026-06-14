@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=morris_screen
+#SBATCH --job-name=monte_carlo
 #SBATCH --error=error.log
 #SBATCH --nodes=1
 #SBATCH --partition=sharing,short,west
