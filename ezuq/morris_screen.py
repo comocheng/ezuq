@@ -52,7 +52,7 @@ def setup_runfiles(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=40
 
     # Define the problem using SALib format
     # we need to clip the bounds to avoid infinity in the transformation to normal space.
-    confidence_interval = 0.9999
+    confidence_interval = 0.95
     alpha = (1 - confidence_interval) / 2
 
     problem = {
