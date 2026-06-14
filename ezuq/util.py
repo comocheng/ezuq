@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import yaml
 import cantera as ct
 
@@ -52,3 +53,9 @@ def setup_condition_dirs(base_dir, conditions):
         os.makedirs(condition_dir, exist_ok=True)
         with open(os.path.join(condition_dir, 'settings.yaml'), 'w') as f:
             yaml.dump(condition, f, default_flow_style=False)
+
+
+def is_diagonal(matrix):
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        return False
+    return np.all(matrix == np.diag(np.diagonal(matrix)))
