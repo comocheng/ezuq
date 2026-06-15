@@ -118,8 +118,6 @@ w_thermo = (L_thermo @ z_thermo.T).T
 w_kinetic = (L_kinetic @ z_kinetic.T).T
 w = np.concatenate((w_thermo, w_kinetic), axis=1)
 
-
-
 # +
 
 chemkin_file = os.path.join(working_dir, 'chem_annotated.inp')
@@ -127,23 +125,17 @@ dictionary_file = os.path.join(working_dir, 'species_dictionary.txt')
 species_list, reaction_list = rmgpy.chemkin.load_chemkin_file(chemkin_file, dictionary_file)
 # -
 
-
-
-
-
 i_sens = 14
 physical_result = SALib.analyze.morris.analyze(problem, w, morris_y[:, i_sens], scaled=True)
 
-independent_result = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
+# +
+# independent_result = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
+# -
 
 plt.scatter(physical_result['mu_star'], physical_result['sigma'], s=4)
 plt.axvline(x=np.max(physical_result['mu_star']) * 0.05, color='black', linewidth=0.4)
 plt.xlabel('$\mu *$')
 plt.ylabel('$\sigma$')
-
-
-
-
 
 # +
 # Rank parameter names by mean effect
@@ -174,31 +166,9 @@ for i in range(len(contributions)):
     
 # -
 
-contributions[:10]
-
-# # save top 10 to a problem_desc.yaml for mc run
+# # save the top ones to a morris_screen_set.yaml for mc run
 
 # +
-monte_carlo_condition_dir = '/scratch/harris.se/guassian_scratch/uq_reformulation_paper_runs/01_uncorrelated_no_rank_no_BM_cov/morris_top_10_mc/600K'
-
-k_params = []
-g_params = []
-
-species_names = [x.to_chemkin() for x in species_list]
-reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
-for i in range(10):
-    name = contributions[i][0]
-    if name in species_names:
-        g_params.append(species_names.index(name))
-    elif name in reaction_names:
-        k_params.append(reaction_names.index(name))
-    else:
-        raise ValueError(f'could not identify parameter with name {name}')
-    
-    if contributions[i][1] < threshold:
-        print(f'Reduced to {i} params')
-        break
-
 # save the problem description for this condition. Different conditions will have difference reduced parameter sets
 problem = {
     'g_params': g_params,
@@ -208,49 +178,9 @@ problem = {
     'k_param_names': [reaction_list[i].to_chemkin(species_list, kinetics=False) for i in k_params],
 }
 
-with open(os.path.join(monte_carlo_condition_dir, 'problem_desc.yaml'), 'w') as f:
+with open(os.path.join(morris_dir, 'morris_screen_set.yaml'), 'w') as f:
     yaml.dump(problem, f, default_flow_style=False)
 # -
-
-monte_carlo_condition_dir
-
-ezuq.monte_carlo.reassemble_chunks(monte_carlo_condition_dir)
-
-ezuq.monte_carlo.reassemble_chunks(
-    '/scratch/harris.se/guassian_scratch/uq_reformulation_paper_runs/01_uncorrelated_no_rank_no_BM_cov/local_top_10_mc//600K'
-)
-
-sqk = np.load('/scratch/harris.se/guassian_scratch/uq_reformulation_paper/04_Local_Uncertainty/2_correlated_original_no_rank/sigma_qq_kinetics.npy')
-sqt = np.load('/scratch/harris.se/guassian_scratch/uq_reformulation_paper/04_Local_Uncertainty/2_correlated_original_no_rank/sigma_qq_thermo.npy')
-
-sqk.shape
-
-sqt.shape
-
-149+2896
-
-
-
-set(w_thermo[:, 4])  # J/mol
-
-set(morris_samples[:, 4])
-
-values = list(set(morris_samples[:, 4]))
-
-values
-
-z_values = scipy.stats.norm.ppf(values)
-
-z_values = z_values[:, None]
-
-z_values
-
-L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
-
-thermo_perturbations = (L_thermo @ z_values.T).T * 4184  # convert RMG-UQ's kcal/mol to J/mol
-
-plt.matshow(L_thermo)
 
 
 
