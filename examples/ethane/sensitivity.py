@@ -65,9 +65,9 @@ for i, T in enumerate(temperatures):
     sensitivity[i, :] = sensitivity_i
 
 np.save('temperatures.npy', temperatures)
-np.save('temperatures.npy', temperatures)
-np.save('temperatures.npy', temperatures)
-np.save('sensitivity.npy', temperatures)
+np.save('mole_fracs.npy', mole_fracs)
+np.save('mass_fracs.npy', mass_fracs)
+np.save('sensitivity.npy', sensitivity)
 # -
 
 # ## Plot top concentrations
