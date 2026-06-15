@@ -215,4 +215,26 @@ a = np.array([1, 0, 1, 1, 1, 1, 7, 0, 0])
 np.where(a != 0)[0]
 # -
 
+problem['g_params']
+
+# +
+# show the covariance matrix used
+
+thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
+thermo_covariance_matrix_subset = thermo_covariance_matrix[np.ix_(problem['g_params'], problem['g_params'])]
+
+
+thermo_covariance_matrix_reduced = np.zeros_like(thermo_covariance_matrix)
+for i in range(thermo_covariance_matrix_reduced.shape[0]):
+    if i in problem['g_params']:
+        thermo_covariance_matrix_reduced[i, i] = thermo_covariance_matrix[i, i]
+
+
+thermo_covariance_matrix_reduced[np.ix_(problem['g_params'], problem['g_params'])] = thermo_covariance_matrix_subset
+plt.matshow(thermo_covariance_matrix_subset)
+plt.matshow(thermo_covariance_matrix_reduced)
+# -
+
+thermo_covariance_matrix_subset
+
 
