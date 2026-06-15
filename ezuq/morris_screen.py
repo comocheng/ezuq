@@ -197,6 +197,37 @@ def run_chunk(settings_yaml, chunk_index):
     np.save(output_filename, y)
 
 
+def get_results_for_morris_screen(gas, settings):
+    """Do the Morris Analysis and return the contributions in sorted order"""
+    raise NotImplementedError()  # this is not ready yet, we need to reassemble the results from the chunks first and then we can do the analysis. For now just return the problem_desc for the reduced set?
+    # # Just return the problem_desc for the reduced set?
+    
+    # # load the covariance matrices
+    # thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
+    # kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
+
+    # z = scipy.stats.norm.ppf(morris_samples)
+    # z_thermo = z[:, :gas.n_species]
+    # z_kinetic = z[:, gas.n_species:]
+
+
+    # L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
+    # assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
+    # thermo_perturbations = (L_thermo @ z_thermo.T).T * 4184  # convert RMG-UQ's kcal/mol to J/mol
+
+
+    # L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+    # assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
+    # kinetic_perturbations = (L_kinetic @ z_kinetic.T).T  # in lnk space
+
+    # w_thermo = (L_thermo @ z_thermo.T).T
+    # w_kinetic = (L_kinetic @ z_kinetic.T).T
+    # w = np.concatenate((w_thermo, w_kinetic), axis=1)
+
+
+    # physical_result = SALib.analyze.morris.analyze(problem, w, morris_y[:, i_sens], scaled=True)
+
+
 
 def _setup_runfiles_intermediate(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=400):
     """Like setup_runfiles, but for the intermediate thermo/kinetic parameters in the model

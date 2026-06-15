@@ -20,12 +20,13 @@ from ezuq.simulation.jsr import run_simulation
 
 CHUNK_SIZE = 1000
 
-def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
+def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None):
     """Set up the runfiles for Monte Carlo Sampling
     working_dir should be the directory where the RMG and Cantera mechanisms are saved.
 
     optional morris_dir to use the results of screening
-    if no morris_dir is provided, this will set up the runfiles for a full Monte Carlo sampling, which is probably too expensive to run to convergence
+    if no morris_dir is provided and the string '?' is provided, it will search for it in the usual location.
+    If morrid_dir is None, this will set up the runfiles for a full Monte Carlo sampling, which is probably too expensive to run to convergence
 
     i_sens is the index of the output variable to use for screening if using morris_dir
     """
@@ -33,7 +34,8 @@ def setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=None):
     monte_carlo_dir = os.path.join(working_dir, 'monte_carlo')
     os.makedirs(monte_carlo_dir, exist_ok=True)
 
-    if morris_dir is None:
+    if morris_dir == '?':
+        # try to find it
         if os.path.exists(os.path.join(working_dir, 'morris_screen')) and \
                 os.path.exists(os.path.join(working_dir, 'morris_screen', 'morris_samples.npy')) and \
                 os.path.exists(os.path.join(working_dir, 'morris_screen', 'problem_desc.yaml')):
