@@ -177,6 +177,7 @@ for z, condition in enumerate(conditions):
 
 # # Plot individual distributions
 
+colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 for z, condition in enumerate(conditions):
     name = condition['name']
     temperature = condition['temperature']
@@ -206,7 +207,8 @@ for z, condition in enumerate(conditions):
 
 # # Plot our final model with errorbars
 
-colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+# +
+
 temperatures = [c['temperature'] for c in conditions]
 plt.plot(temperatures, nominal_results[:, i_sp], label='Nominal Value')
 for z, condition in enumerate(conditions):
@@ -238,8 +240,9 @@ plt.title(f'{gas.species_names[i_sp]} Concentration')
 plt.xlabel('Temperature (K)')
 plt.ylabel('Mole Fraction')
 plt.legend()
+# -
 
-
+print(lower95)
 
 
 
