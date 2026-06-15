@@ -89,6 +89,7 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
             'k_params': k_params,
             'g_param_names': species_names,
             'k_param_names': reaction_names,
+            'model_reduction': False
         }
         with open(os.path.join(sobol_dir, 'problem_desc.yaml'), 'w') as f:
             yaml.dump(problem, f)
@@ -96,7 +97,7 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
         # Generate Sobol samples (takes a minute)
         X = SALib.sample.sobol.sample(problem, N=N, calc_second_order=False, seed=SEED)
         print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
-        np.save(os.path.join(sobol_dir, 'sobol_samples.npy'), X)
+        np.save(os.path.join(sobol_dir, 'sobol_samples_unreduced.npy'), X)
 
     # copy the slurm script into the Sobol dir
     shutil.copyfile(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'SLURM', 'run_sobol.sh'), os.path.join(sobol_dir, 'run_sobol.sh'))
@@ -156,7 +157,6 @@ def run_chunk(settings_yaml, chunk_index):
     assert len(set(ct2rmg_rxn.values())) == len(reaction_list), "Reactions in Cantera mechanism do not match reactions in RMG mechanism"
 
     y = np.zeros((CHUNK_SIZE, gas.n_species))
-
     rng = np.random.default_rng(chunk_index)
 
     # save copies of all thermo for faster perturbation
@@ -165,6 +165,89 @@ def run_chunk(settings_yaml, chunk_index):
         thermo_copies.append(ct.Species().from_dict(gas.species()[sp_index].input_data.copy()))
 
     problem_desc_file = os.path.join(condition_dir, 'problem_desc.yaml')
+    with open(problem_desc_file, 'r') as f:
+        problem = yaml.load(f, Loader=yaml.FullLoader)
+
+    if ezuq.util.is_diagonal(thermo_covariance_matrix) and ezuq.util.is_diagonal(kinetic_covariance_matrix):
+        print('Parameters are independent')
+        # Figure out if there was any model reduction done
+        if 'model_reduction' in problem and problem['model_reduction'] == True:
+            raise NotImplementedError('Sobol with model reduction not implemented yet')
+        else:
+            # ------------- no model reduction, full sampling -------------
+            X = np.load(os.path.join(sobol_dir, 'sobol_samples_unreduced.npy'))
+            assert X.shape[1] == thermo_covariance_matrix.shape[0] + kinetic_covariance_matrix.shape[0], "Number of variables in Sobol samples does not match number of species + reactions"
+
+            if chunk_index * CHUNK_SIZE >= X.shape[0]:
+                raise ValueError(f"Chunk index {chunk_index} is out of range for number of samples {X.shape[0]} with chunk size {CHUNK_SIZE}")
+    
+            # Get our subset of samples for this chunk
+            maximum_index = min((chunk_index + 1) * CHUNK_SIZE, X.shape[0])
+            X = X[chunk_index * CHUNK_SIZE: maximum_index, :]
+
+            # Get the thermo perturbations
+            # ------------- Thermo perturbations -------------
+            thermo_uniform_perturbations = X[:, :len(species_list)]
+            L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
+            assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
+            z_thermo = scipy.stats.norm.ppf(thermo_uniform_perturbations)  # transform the unit uniforms to standard normals
+            thermo_perturbations = (L_thermo @ z_thermo.T).T * 4184  # convert RMG-UQ's kcal/mol to J/mol
+
+            # ------------- Kinetic perturbations -------------
+            kinetic_uniform_perturbations = X[:, len(species_list):]
+            L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+            assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
+            z_kinetic = scipy.stats.norm.ppf(kinetic_uniform_perturbations)
+            kinetic_perturbations = (L_kinetic @ z_kinetic.T).T  # these are the perturbations in log space, so we can exponentiate to get the kinetic multipliers
+            kinetic_multipliers_rmg = np.exp(kinetic_perturbations)
+            kinetic_multipliers_ct = kinetic_multipliers_rmg @ ct2rmg_matrix.T  # convert from RMG reaction space to Cantera reaction space
+
+            # Do the perturbations and run the simulations
+            # save copies of all thermo for faster perturbation
+            thermo_copies = []
+            for sp_index in range(gas.n_species):
+                thermo_copies.append(ct.Species().from_dict(gas.species()[sp_index].input_data.copy()))
+
+            # Cantera does well if you give it lots of CPUs for a single simulation
+            # but slows down if you try to parallelize different simulations across multiple processes
+            # so we run the simulations in serial here do the parallelize across SLURM array jobs.
+            for i in range(X.shape[0]):
+
+                # perturb all the species
+                for sp_index in range(gas.n_species):
+                    # random perturbation
+                    if thermo_perturbations[i, sp_index] != 0:
+                        perturbed_sp = ezuq.util.perturb_species_ct(gas.species()[sp_index], thermo_perturbations[i, sp_index])
+                        gas.modify_species(sp_index, perturbed_sp)
+
+                # set multipliers
+                for rxn_index_ct in range(gas.n_reactions):
+                    gas.set_multiplier(kinetic_multipliers_ct[i, rxn_index_ct], rxn_index_ct)
+                try:
+                    # TODO add timeout here so that if a simulation is taking too long we can skip it and move on 
+                    y[i, :] = run_simulation(gas, settings)
+                except ct.CanteraError:
+                    y[i, :] = np.nan  # if the simulation fails, we can fill in NaNs and move on. The Morris analysis can handle some failed simulations as long as most of them work.
+
+                # Reset things
+                for sp_index in range(gas.n_species):
+                    if thermo_perturbations[i, sp_index] != 0:
+                        gas.modify_species(sp_index, thermo_copies[sp_index])
+                gas.set_multiplier(1.0)
+
+            np.save(output_filename, y)
+
+
+    else:
+        # Covariance matrices are not diagonal/independent
+        raise NotImplementedError()
+
+    
+    
+        
+
+
+
     if not os.path.exists(problem_desc_file):
         # no problem dscription with parameter reduction was done, so this will be a full Monte Carlo sampling
         g_params = list(range(gas.n_species))
