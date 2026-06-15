@@ -70,8 +70,8 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
     else:
         print('No reduced model params provided, this will run sampling on the full set')
 
-        g_params = list(np.arange(len(species_list)))
-        k_params = list(np.arange(len(reaction_list)))
+        g_params = list(range(len(species_list)))
+        k_params = list(range(len(reaction_list)))
 
         species_names = [x.to_chemkin() for x in species_list]
         reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
@@ -91,8 +91,10 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
             'k_param_names': reaction_names,
             'model_reduction': False
         }
-        with open(os.path.join(sobol_dir, 'problem_desc.yaml'), 'w') as f:
-            yaml.dump(problem, f)
+        for condition in conditions:
+            sobol_condition_dir = os.path.join(sobol_dir, condition['name'])
+            with open(os.path.join(sobol_condition_dir, 'problem_desc.yaml'), 'w') as f:
+                yaml.dump(problem, f, default_flow_style=False)
 
         # Generate Sobol samples (takes a minute)
         X = SALib.sample.sobol.sample(problem, N=N, calc_second_order=False, seed=SEED)
@@ -157,7 +159,6 @@ def run_chunk(settings_yaml, chunk_index):
     assert len(set(ct2rmg_rxn.values())) == len(reaction_list), "Reactions in Cantera mechanism do not match reactions in RMG mechanism"
 
     y = np.zeros((CHUNK_SIZE, gas.n_species))
-    rng = np.random.default_rng(chunk_index)
 
     # save copies of all thermo for faster perturbation
     thermo_copies = []
@@ -242,79 +243,6 @@ def run_chunk(settings_yaml, chunk_index):
         # Covariance matrices are not diagonal/independent
         raise NotImplementedError()
 
-    
-    
-        
-
-
-
-    if not os.path.exists(problem_desc_file):
-        # no problem dscription with parameter reduction was done, so this will be a full Monte Carlo sampling
-        g_params = list(range(gas.n_species))
-        k_params = list(range(len(reaction_list)))
-
-        thermo_perturbations = rng.multivariate_normal(mean=np.zeros(thermo_covariance_matrix.shape[0]), cov=thermo_covariance_matrix, size=CHUNK_SIZE) * 4184  # convert to J/mol
-        kinetic_perturbations = rng.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix.shape[0]), cov=kinetic_covariance_matrix, size=CHUNK_SIZE)
-
-    else:
-        with open(problem_desc_file, 'r') as f:
-            problem = yaml.load(f, Loader=yaml.FullLoader)
-
-        g_params = problem['g_params']
-        k_params = problem['k_params']
-
-        # This is only okay if there are no off-diagonals
-        # count the off_diagonals
-        if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
-            raise NotImplementedError("Parameter reduction with non-diagonal covariance matrices is not implemented yet.")
-
-        # reduce the thermo covariance matrix to the species in g_params
-        thermo_covariance_matrix_subset = thermo_covariance_matrix[np.ix_(g_params, g_params)]
-        kinetic_covariance_matrix_subset = kinetic_covariance_matrix[np.ix_(k_params, k_params)]
-
-        thermo_perturbations_subset = rng.multivariate_normal(mean=np.zeros(thermo_covariance_matrix_subset.shape[0]), cov=thermo_covariance_matrix_subset, size=CHUNK_SIZE) * 4184  # convert to J/mol
-        kinetic_perturbations_subset = rng.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix_subset.shape[0]), cov=kinetic_covariance_matrix_subset, size=CHUNK_SIZE)
-
-        thermo_perturbations = np.zeros((CHUNK_SIZE, gas.n_species))
-        kinetic_perturbations = np.zeros((CHUNK_SIZE, len(reaction_list)))
-
-        for i, g_param in enumerate(g_params):
-            thermo_perturbations[:, g_param] = thermo_perturbations_subset[:, i]
-        for j, k_param in enumerate(k_params):
-            kinetic_perturbations[:, k_param] = kinetic_perturbations_subset[:, j]
-
-    kinetic_multipliers = np.exp(kinetic_perturbations)
-    kinetic_multipliers_ct = kinetic_multipliers.dot(ct2rmg_matrix.T)
-
-
-    # Cantera does well if you give it lots of CPUs for a single simulation
-    # but slows down if you try to parallelize different simulations across multiple processes
-    # so we run the simulations in serial here do the parallelize across SLURM array jobs.
-    for i in range(CHUNK_SIZE):
-
-        # perturb all the species
-        for sp_index in g_params:
-            # random perturbation
-            perturbed_sp = ezuq.util.perturb_species_ct(gas.species()[sp_index], thermo_perturbations[i, sp_index])
-            gas.modify_species(sp_index, perturbed_sp)
-
-        # set multipliers
-        for j, rxn_index_rmg in enumerate(k_params):
-            ct_indices = np.where(ct2rmg_matrix[:, rxn_index_rmg] == 1)[0]
-            for ct_index in ct_indices:
-                gas.set_multiplier(kinetic_multipliers_ct[i, ct_index], ct_index)
-        try:
-            # TODO add timeout here so that if a simulation is taking too long we can skip it and move on 
-            y[i, :] = run_simulation(gas, settings)
-        except ct.CanteraError:
-            y[i, :] = np.nan  # if the simulation fails, we can fill in NaNs and move on. The Morris analysis can handle some failed simulations as long as most of them work.
-
-        # Reset things
-        for sp_index in g_params:
-            gas.modify_species(sp_index, thermo_copies[sp_index])
-        gas.set_multiplier(1.0)
-
-    np.save(output_filename, y)
 
 def reassemble_chunks(condition_dir):
     """After all the chunks have been run, we need to reassemble the results into a single file for each condition"""
