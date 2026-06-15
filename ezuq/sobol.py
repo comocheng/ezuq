@@ -248,10 +248,11 @@ def reassemble_chunks(condition_dir):
     """After all the chunks have been run, we need to reassemble the results into a single file for each condition"""
 
     condition_name = os.path.basename(condition_dir)
-    y_files = sorted(glob.glob(os.path.join(condition_dir, 'monte_carlo_y', f'y_*.npy')))
+    y_files = sorted(glob.glob(os.path.join(condition_dir, 'sobol_y', f'y_*.npy')))
 
     if len(y_files) == 0:
-        raise ValueError('No files found')
+        print(f"No chunk files found for condition {condition_name} in {os.path.join(condition_dir, 'sobol_y')}")
+        return
 
     # test a sample
     sample_y = np.load(y_files[0])
@@ -262,29 +263,21 @@ def reassemble_chunks(condition_dir):
 
     # get the total number of samples from the file count
     N = CHUNK_SIZE * len(y_files)
-    monte_carlo_y = np.zeros((N, k))
+    sobol_y = np.zeros((N, k))
 
     for i in range(len(y_files)):
         match = re.search(r'y_(\d+).npy', y_files[i])
         index = int(match.group(1))
         data = np.load(y_files[i])
         assert data.shape == (CHUNK_SIZE, k)
-        monte_carlo_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
+        sobol_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
 
-    # see how many failed
-    index_redo = set()
-    invalid_count = 0
-    for i in range(monte_carlo_y.shape[0]):
-        if np.all(monte_carlo_y[i, :] == 0):
-            invalid_count += 1
-            index_redo.add(int(i / 1000.0))
+    # starting from the end, delete any rows that are still all zeros, the difference between chunks that were fully filled and the last chunk
+    while np.all(sobol_y[-1, :] == 0):
+        sobol_y = sobol_y[:-1, :]
 
-    print(f'{condition_name}, {(monte_carlo_y.shape[0] - invalid_count) / monte_carlo_y.shape[0] * 100:.2f} % valid')
-    if invalid_count / monte_carlo_y.shape[0] > 0.01:
-        print(f'You should redo condition {condition_name}')
-        print(f'Redo indices: {index_redo}')
-
-    np.save(os.path.join(condition_dir, 'monte_carlo_results.npy'), monte_carlo_y)
+    print(f'After reassembling, got {sobol_y.shape[0]} samples for condition {condition_name}')
+    np.save(os.path.join(condition_dir, 'sobol_results.npy'), sobol_y)
 
 
 if __name__ == "__main__":
