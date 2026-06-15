@@ -84,92 +84,43 @@ ezuq.morris_screen.reassemble_chunks(os.path.join(working_dir, 'morris_screen'))
 
 # # see results
 
-morris_dir = os.path.join(working_dir, 'morris_screen')
-morris_samples = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
-with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'rb') as f:
-    problem = yaml.load(f, Loader=yaml.FullLoader)
+# +
+mu_star_threshold = 0.05
+results = ezuq.morris_screen.save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=mu_star_threshold, verbose=False)
+
+def pad_to_length(input_str, length):
+    input_str = str(input_str)
+    if len(input_str) > length:
+        raise ValueError('Pad length for this string must be at least', len(input_str))
+    return input_str + ' ' * (length - len(input_str))
 
 for condition in conditions:
-    morris_y = np.load(os.path.join(morris_dir, condition['name'], 'morris_sim_results.npy'))
+    name = condition['name']
 
-    nominal_values = ezuq.simulation.jsr.run_simulation(gas, condition)
-    for i in range(morris_y.shape[0]):
-        if np.isnan(morris_y[i, :]).any():
-            morris_y[i, :] = nominal_values
-
-
-    # Do analysis in physical parameter space
-    # load the covariance matrices
-    thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
-    kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
-    
-    z = scipy.stats.norm.ppf(morris_samples)
-    z_thermo = z[:, :gas.n_species]
-    z_kinetic = z[:, gas.n_species:]
-    
-    
-    L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-    assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
-    thermo_perturbations = (L_thermo @ z_thermo.T).T * 4184  # convert RMG-UQ's kcal/mol to J/mol
-    
-    
-    L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
-    assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
-    kinetic_perturbations = (L_kinetic @ z_kinetic.T).T  # in lnk space
-
-
-    w_thermo = (L_thermo @ z_thermo.T).T
-    w_kinetic = (L_kinetic @ z_kinetic.T).T
-    w = np.concatenate((w_thermo, w_kinetic), axis=1)
-
-    
-    physical_result = SALib.analyze.morris.analyze(problem, w, morris_y[:, i_sens], scaled=True)
-    # independent_result = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
-
-    plt.scatter(physical_result['mu_star'], physical_result['sigma'], s=4)
-    plt.axvline(x=np.max(physical_result['mu_star']) * 0.05, color='black', linewidth=0.4)
+    plt.scatter(results[name]['mu_star'], results[name]['sigma'], s=4)
+    plt.axvline(x=np.max(results[name]['mu_star']) * 0.05, color='black', linewidth=0.4)
     plt.xlabel('$\mu *$')
     plt.ylabel('$\sigma$')
     plt.title(condition['name'])
     plt.show()
 
-
     # Rank parameter names by mean effect
-    contributions = [(x, y) for y, x in sorted(zip(physical_result['mu_star'].data, problem['names']))][::-1]
+    contributions = [(x, y) for y, x in sorted(zip(results[name]['mu_star'].data, results[name]['names']))][::-1]
     
     # define the tolerance for considering a parameter to be irrelevant
-    threshold = 0.05 * contributions[0][1]  # use 0.01 for tighter tolerance
-    k_params = []
-    g_params = []
-    
-    species_names = [x.to_chemkin() for x in species_list]
-    reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
+    threshold = mu_star_threshold * contributions[0][1]
+    PAD_LEN = 44
+    print('i', '\t', pad_to_length('Parameter', PAD_LEN), 'mu_star')
+    print('------------------------------------------------------------------------')
     for i in range(len(contributions)):
     
         if contributions[i][1] < threshold:
             print(f'Reduced to {i} params')
             break
     
-        name = contributions[i][0]
-        print(i, name)
-        if name in species_names:
-            g_params.append(species_names.index(name))
-        elif name in reaction_names:
-            k_params.append(reaction_names.index(name))
-        else:
-            raise ValueError(f'could not identify parameter with name {name}')
+        param_name = contributions[i][0]
+        print(i, '\t', pad_to_length(param_name, PAD_LEN), f'{contributions[i][1]:0.5f}')
 
-
-    # save the problem description for this condition. Different conditions will have difference reduced parameter sets
-    morris_screen_result = {
-        'g_params': g_params,
-        'k_params': k_params,
-        'num_vars': len(g_params) + len(k_params),
-        'g_param_names': [species_list[i].to_chemkin() for i in g_params],
-        'k_param_names': [reaction_list[i].to_chemkin(species_list, kinetics=False) for i in k_params],
-    }
-    
-    with open(os.path.join(morris_dir, condition['name'], 'morris_screen_set.yaml'), 'w') as f:
-        yaml.dump(morris_screen_result, f, default_flow_style=False)
+# -
 
 

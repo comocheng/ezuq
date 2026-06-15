@@ -197,6 +197,106 @@ def run_chunk(settings_yaml, chunk_index):
     np.save(output_filename, y)
 
 
+def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, verbose=True):
+    """After we analyze the Morris results, we can save the reduced set of parameters that we want to use for the full global sampling
+    
+    mu_star_threshold is the threshold for considering a parameter to be irrelevant. If a parmeter's mu_star is less than mu_star_threshold * max(mu_star), it gets left out of the reduced set
+    """
+    
+    morris_dir = os.path.join(working_dir, 'morris_screen')
+    morris_samples = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
+    with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'rb') as f:
+        problem = yaml.load(f, Loader=yaml.FullLoader)
+
+    chemkin_file = os.path.join(working_dir, 'chem_annotated.inp')
+    dictionary_file = os.path.join(working_dir, 'species_dictionary.txt')
+    species_list, reaction_list = rmgpy.chemkin.load_chemkin_file(chemkin_file, dictionary_file)
+
+    gas = ct.Solution(os.path.join(working_dir, 'chem_annotated.yaml'))
+    
+    # Do analysis in physical parameter space
+    # load the covariance matrices
+    thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
+    kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
+
+    # Transform the Morris samples from unit uniform to standard normal
+    z = scipy.stats.norm.ppf(morris_samples)
+    z_thermo = z[:, :gas.n_species]
+    z_kinetic = z[:, gas.n_species:]
+    
+    L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
+    assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
+    
+    L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+    assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
+
+    # Transform the Morris samples from standard normal to the actual perturbations using the Cholesky decomposition of the covariance matrix
+    w_thermo = (L_thermo @ z_thermo.T).T
+    w_kinetic = (L_kinetic @ z_kinetic.T).T
+    w = np.concatenate((w_thermo, w_kinetic), axis=1)
+
+    if isinstance(conditions, dict):
+        conditions = [conditions]
+
+    contribution_results = {}
+
+    for condition in conditions:
+        morris_y = np.load(os.path.join(morris_dir, condition['name'], 'morris_sim_results.npy'))
+        nominal_values = ezuq.simulation.jsr.run_simulation(gas, condition)
+        for i in range(morris_y.shape[0]):
+            if np.isnan(morris_y[i, :]).any():
+                morris_y[i, :] = nominal_values
+
+        if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
+            raise NotImplementedError()
+        else:
+            # parameters are independent. reduce in physical parameter space (as opposed to decomposed space)
+            physical_result = SALib.analyze.morris.analyze(problem, w, morris_y[:, i_sens], scaled=True)
+            # independent_result = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
+
+            # Rank parameter names by mean effect
+            contributions = [(x, y) for y, x in sorted(zip(physical_result['mu_star'].data, problem['names']))][::-1]
+            
+            # define the tolerance for considering a parameter to be irrelevant
+            threshold = mu_star_threshold * contributions[0][1]  # use 0.01 for tighter tolerance
+            k_params = []
+            g_params = []
+            
+            species_names = [x.to_chemkin() for x in species_list]
+            reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
+            for i in range(len(contributions)):
+                if contributions[i][1] < threshold:
+                    if verbose:
+                        print(f'Reduced to {i} params')
+                    break
+            
+                name = contributions[i][0]
+                if verbose:
+                    print(i, name)
+                if name in species_names:
+                    g_params.append(species_names.index(name))
+                elif name in reaction_names:
+                    k_params.append(reaction_names.index(name))
+                else:
+                    raise ValueError(f'could not identify parameter with name {name}')
+
+
+            # save the problem description for this condition. Different conditions will have difference reduced parameter sets
+            morris_screen_result = {
+                'g_params': g_params,
+                'k_params': k_params,
+                'num_vars': len(g_params) + len(k_params),
+                'g_param_names': [species_list[i].to_chemkin() for i in g_params],
+                'k_param_names': [reaction_list[i].to_chemkin(species_list, kinetics=False) for i in k_params],
+            }
+            
+            with open(os.path.join(morris_dir, condition['name'], 'morris_screen_set.yaml'), 'w') as f:
+                yaml.dump(morris_screen_result, f, default_flow_style=False)
+
+            contribution_results[condition['name']] = physical_result
+    return contribution_results
+
+
 def get_results_for_morris_screen(gas, settings):
     """Do the Morris Analysis and return the contributions in sorted order"""
     raise NotImplementedError()  # this is not ready yet, we need to reassemble the results from the chunks first and then we can do the analysis. For now just return the problem_desc for the reduced set?
