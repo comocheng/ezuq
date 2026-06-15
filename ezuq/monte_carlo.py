@@ -11,9 +11,7 @@ import numpy as np
 import yaml
 import cantera as ct
 import rmgpy.chemkin
-import scipy.stats
 
-import SALib.analyze.morris
 
 import ezuq.util
 from ezuq.simulation.jsr import run_simulation
@@ -66,87 +64,36 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None):
     ezuq.util.setup_condition_dirs(monte_carlo_dir, conditions)
     if morris_dir and i_sens is not None:
         print('Using results of previous Morris screening')
-        morris_samples = np.load(os.path.join(morris_dir, 'morris_samples.npy'))
-        with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'rb') as f:
-            morris_problem = yaml.load(f, Loader=yaml.FullLoader)
-
-
-        # do cholesky decomposition to get samples in physical parameter space instead of unit uniform space
-        z = scipy.stats.norm.ppf(morris_samples)
-        z_thermo = z[:, :gas.n_species]
-        z_kinetic = z[:, gas.n_species:]
-
-        L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-        L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
-
-        w_thermo = (L_thermo @ z_thermo.T).T
-        w_kinetic = (L_kinetic @ z_kinetic.T).T
-        w = np.concatenate((w_thermo, w_kinetic), axis=1)
-
-
+        
         # match the condition dir to the morris condition dir through the name.
         for condition in conditions:
-            morris_settings_yaml = os.path.join(morris_dir, condition["name"], 'settings.yaml')
-            if not os.path.exists(morris_settings_yaml):
+            morris_results_yaml = os.path.join(morris_dir, condition["name"], 'morris_screen_set.yaml')
+            if not os.path.exists(morris_results_yaml):
                 print(f'Skipping condition {condition["name"]} since no matching Morris settings file found')
                 continue
-            morris_y_file = os.path.join(morris_dir, condition["name"], 'morris_sim_results.npy')
-            if not os.path.exists(morris_y_file):
-                print(f'Skipping condition {condition["name"]} since no matching Morris results file found')
-                continue
 
-            morris_y = np.load(morris_y_file)
-
-            nominal_values = run_simulation(gas, condition)  # get rid of nans
-            for i in range(morris_y.shape[0]):
-                if np.isnan(morris_y[i, :]).any():
-                    morris_y[i, :] = nominal_values
-
-
-            # Physical result
-            Si = SALib.analyze.morris.analyze(morris_problem, w, morris_y[:, i_sens], scaled=True)
-
-            # # result in independent basis
-            # Si = SALib.analyze.morris.analyze(morris_problem, z, morris_y[:, i_sens], scaled=False)
-
-
-            # Rank parameter names by mean effect
-            contributions = [(x, y) for y, x in sorted(zip(Si['mu_star'].data, morris_problem['names']))][::-1]
-
-            # define the tolerance for considering a parameter to be irrelevant
-            threshold = 0.05 * contributions[0][1]  # use 0.01 for tighter tolerance
-            k_params = []
-            g_params = []
-
-            species_names = [x.to_chemkin() for x in species_list]
-            reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
-            for i in range(len(contributions)):
-                if contributions[i][1] < threshold:
-                    print(f'Reduced to {i} params')
-                    break
-                name = contributions[i][0]
-                if name in species_names:
-                    g_params.append(species_names.index(name))
-                elif name in reaction_names:
-                    k_params.append(reaction_names.index(name))
-                else:
-                    raise ValueError(f'could not identify parameter with name {name}')
-                
-            # save the problem description for this condition. Different conditions will have difference reduced parameter sets
-            monte_carlo_condition_dir = os.path.join(monte_carlo_dir, os.path.basename(condition["name"]))
-            problem = {
-                'g_params': g_params,
-                'k_params': k_params,
-                'num_vars': len(g_params) + len(k_params),
-                'g_param_names': [species_list[i].to_chemkin() for i in g_params],
-                'k_param_names': [reaction_list[i].to_chemkin(species_list, kinetics=False) for i in k_params],
-            }
-
-            with open(os.path.join(monte_carlo_condition_dir, 'problem_desc.yaml'), 'w') as f:
-                yaml.dump(problem, f, default_flow_style=False)
+            if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
+                raise NotImplementedError("Parameter reduction with non-diagonal covariance matrices is not implemented yet.")
             
-            with open(os.path.join(monte_carlo_condition_dir, 'settings.yaml'), 'w') as f:
-                yaml.dump(condition, f, default_flow_style=False)
+                # with open(morris_results_yaml, 'r') as f: 
+                #     morris_screen_result = yaml.load(f, Loader=yaml.FullLoader)
+                    
+                # # save the problem description for this condition. Different conditions will have difference reduced parameter sets
+                # monte_carlo_condition_dir = os.path.join(monte_carlo_dir, os.path.basename(condition["name"]))
+                # problem = {
+                #     'g_params': morris_screen_result['g_params'],
+                #     'k_params': morris_screen_result['k_params'],
+                #     'num_vars': len(morris_screen_result['g_params']) + len(morris_screen_result['k_params']),
+                #     'g_param_names': [species_list[i].to_chemkin() for i in morris_screen_result['g_params']],
+                #     'k_param_names': [reaction_list[i].to_chemkin(species_list, kinetics=False) for i in morris_screen_result['k_params']],
+                # }
+
+                # with open(os.path.join(monte_carlo_condition_dir, 'problem_desc.yaml'), 'w') as f:
+                #     yaml.dump(problem, f, default_flow_style=False)
+
+            else:
+                # parameters are independent, just copy the Morris screening results over
+                shutil.copyfile(morris_results_yaml, os.path.join(monte_carlo_dir, condition["name"], 'problem_desc.yaml'))
 
     # if no Morris dir is provided, we'll run a full Monte Carlo sampling, which requires no problem description since all parameters are varied
 
