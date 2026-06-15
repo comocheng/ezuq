@@ -21,7 +21,7 @@ from ezuq.simulation.jsr import run_simulation
 
 CHUNK_SIZE = 1000
 
-def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None):
+def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024, SEED=400):
     """Set up the runfiles for Sobol Sampling
     working_dir should be the directory where the RMG and Cantera mechanisms are saved.
 
@@ -69,6 +69,25 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None):
         raise NotImplementedError('Sobol using model reduction not implemented yet')
     else:
         print('No reduced model params provided, this will run sampling on the full set')
+
+        # Define the problem using SALib format
+        # we need to clip the bounds to avoid infinity in the transformation to normal space.
+        confidence_interval = 0.95
+        alpha = (1 - confidence_interval) / 2
+
+        problem = {
+            'num_vars': len(species_list) + len(reaction_list),
+            'names': [sp.to_chemkin() for sp in species_list] + 
+                    [rxn.to_chemkin(species_list, kinetics=False) for rxn in reaction_list],
+            'bounds': [[alpha, 1 - alpha]] * (len(species_list) + len(reaction_list)),  # (slightly clipped) unit uniforms, we'll handle the actual translation to valid perturbations later on
+        }
+        with open(os.path.join(sobol_dir, 'problem_desc.yaml'), 'w') as f:
+            yaml.dump(problem, f)
+
+        # Generate Sobol samples (takes a minute)
+        X = SALib.sample.sobol.sample(problem, N=N, calc_second_order=False, seed=SEED)
+        print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
+        np.save(os.path.join(sobol_dir, 'sobol_samples.npy'), X)
 
 
 

@@ -59,8 +59,11 @@ for T in temperatures:
         'volume': 9.5e-5,       # m^3
     })
 
-# Here we reduce the number of samples for much faster runtime, but you'll probably want to do ~100
-ezuq.sobol.setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=14)
+# Here we reduce the number of samples for much faster runtime, but you'll probably want to do ~1024
+ezuq.sobol.setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=14, N=256)
 # -
+
+data = np.load('/home/moon/ezuq/examples/00_uncorrelated_ethane/sobol/sobol_samples.npy')
+plt.hist(data[:, 20])
 
 
