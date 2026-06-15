@@ -17,6 +17,7 @@
 
 # +
 import os
+import pickle
 import yaml
 import subprocess
 import cantera as ct
@@ -31,6 +32,8 @@ import ezuq.sobol
 import ezuq.morris_screen
 import ezuq.util
 import ezuq.simulation
+
+import SALib.analyze.sobol
 # -
 
 working_dir = os.path.abspath('.')
@@ -63,7 +66,141 @@ for T in temperatures:
 ezuq.sobol.setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=14, N=256)
 # -
 
-data = np.load('/home/moon/ezuq/examples/00_uncorrelated_ethane/sobol/sobol_samples.npy')
-plt.hist(data[:, 20])
+# # RUN THE SIMS
+
+for condition in [conditions[1]]:
+    condition_dir = os.path.join(working_dir, 'sobol', condition['name'])
+
+    my_settings_file = os.path.join(condition_dir, 'settings.yaml')
+    print(f'Running sims for {condition["name"]}')
+    for i in range(16):
+        subprocess.check_call(['python', '-m', 'ezuq.sobol', my_settings_file, str(i)])
+
+for condition in conditions:
+    condition_dir = os.path.join(working_dir, 'sobol', condition['name'])
+    ezuq.sobol.reassemble_chunks(condition_dir)
+
+# # Plot the distribution
+
+# Get nominal results for plotting
+i_sp = 14
+cantera_file = os.path.join(working_dir, 'chem_annotated.yaml')
+gas = ct.Solution(cantera_file)
+nominal_results = np.zeros((len(conditions), gas.n_species))
+for z, condition in enumerate(conditions):
+    nominal_results[z, :] = ezuq.simulation.jsr.run_simulation(gas, condition)
+
+# Get upper/lower 95% confidence intervals for plotting
+upper95 = np.zeros((len(conditions), gas.n_species))
+lower95 = np.zeros((len(conditions), gas.n_species))
+for z, condition in enumerate(conditions):
+    name = condition['name']
+    condition_dir = os.path.join(working_dir, 'sobol', name)
+    sobol_samples = np.load(os.path.join(condition_dir, 'sobol_results.npy'))
+    lower95[z, :] = np.percentile(sobol_samples, 2.5, axis=0)
+    upper95[z, :] = np.percentile(sobol_samples, 97.5, axis=0)
+
+# +
+
+
+for z, condition in enumerate(conditions):
+    name = condition['name']
+    temperature = condition['temperature']
+    condition_dir = os.path.join(working_dir, 'sobol', name)
+    sobol_samples = np.load(os.path.join(condition_dir, 'sobol_results.npy'))
+
+    # remove all zeros
+    nonzero_data = sobol_samples[~np.all(sobol_samples == 0, axis=1)]
+
+    result = plt.hist(nonzero_data[:, i_sp], 48, density=True, alpha=0.6)
+    plt.axvline(x=np.mean(nonzero_data[:, i_sp]), color=colors[0], label='Mean')
+    plt.axvline(x=np.median(nonzero_data[:, i_sp]), color='black', label='Median')
+
+
+    plt.title(f'{gas.species_names[i_sp]} PDF - {name}')
+    plt.xlabel('Mole Fraction')
+    plt.ylabel('Density')
+    plt.legend()
+    plt.show()
+# -
+
+# # Plot the final model with errorbars
+
+colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+temperatures = [c['temperature'] for c in conditions]
+plt.plot(temperatures, nominal_results[:, i_sp], label='Nominal Value')
+for z, condition in enumerate(conditions):
+    name = condition['name']
+    temperature = condition['temperature']
+    condition_dir = os.path.join(working_dir, 'sobol', name)
+    sobol_samples = np.load(os.path.join(condition_dir, 'sobol_results.npy'))
+
+    # remove all zeros
+    nonzero_data = sobol_samples[~np.all(sobol_samples == 0, axis=1)]
+    
+    # show 95% confidence interval
+    label = '_no_label'
+    if z == 0:
+        label = '95% Confidence Interval'
+    plt.fill_between(temperatures, lower95[:, i_sp], nominal_results[:, i_sp], alpha=0.1, color=colors[0], label=label)
+    plt.fill_between(temperatures, nominal_results[:, i_sp], upper95[:, i_sp], alpha=0.1, color=colors[0])
+    
+
+    plt.boxplot(
+        [nonzero_data[:, i_sp]],
+        positions=[temperature],
+        widths=5,
+        showfliers=False,
+        # patch_artist=True,
+        medianprops=dict(color='black')
+    )
+plt.title(f'{gas.species_names[i_sp]} Concentration')
+plt.xlabel('Temperature (K)')
+plt.ylabel('Mole Fraction')
+plt.legend()
+
+print(lower95)
+
+# # Look at some rankings
+
+# +
+# Load the Sobol X
+sobol_X = np.load(os.path.join(working_dir, 'sobol', 'sobol_samples_unreduced.npy'))
+with open(os.path.join(working_dir, 'sobol', conditions[2]['name'], 'problem_desc.yaml'), 'rb') as f:
+    sobol_problem = yaml.load(f, Loader=yaml.FullLoader)
+
+sobol_y = np.load(os.path.join(working_dir, 'sobol', conditions[2]['name'], 'sobol_results.npy'))
+
+problem_desc_file = os.path.join(working_dir, 'sobol', conditions[2]['name'], 'problem_desc.yaml')
+with open(problem_desc_file, 'r') as f:
+    problem = yaml.load(f, Loader=yaml.FullLoader)
+
+# -
+
+sobol_problem = {
+    'num_vars': problem['num_vars'],
+    'bounds': problem['bounds'],
+    'names': problem['names'],
+}
+
+Si = SALib.analyze.sobol.analyze(sobol_problem, sobol_y[:, i_sp], calc_second_order=False, seed=400)
+
+# +
+# Show S1 rankings
+
+S1_results = [(name, x) for x, name in sorted(zip(Si['S1'], sobol_problem['names']))][::-1]
+for i in range(20):
+    # print(i, S1_results[i][0], S1_results[i][1])
+    print(i, S1_results[i][0])
+
+# +
+# Show S1 rankings
+
+ST_results = [(name, x) for x, name in sorted(zip(Si['ST'], sobol_problem['names']))][::-1]
+for i in range(20):
+    print(i, ST_results[i][0], ST_results[i][1])
+# -
+
+Si['S1']
 
 
