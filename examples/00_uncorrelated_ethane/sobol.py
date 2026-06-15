@@ -34,6 +34,9 @@ import ezuq.util
 import ezuq.simulation
 
 import SALib.analyze.sobol
+
+# +
+# ezuq.sobol.CONFIDENCE_INTERVAL = 0.99
 # -
 
 working_dir = os.path.abspath('.')
@@ -98,8 +101,8 @@ for z, condition in enumerate(conditions):
     name = condition['name']
     condition_dir = os.path.join(working_dir, 'sobol', name)
     sobol_samples = np.load(os.path.join(condition_dir, 'sobol_results.npy'))
-    lower95[z, :] = np.percentile(sobol_samples, 2.5, axis=0)
-    upper95[z, :] = np.percentile(sobol_samples, 97.5, axis=0)
+    lower95[z, :] = np.nanpercentile(sobol_samples, 2.5, axis=0)
+    upper95[z, :] = np.nanpercentile(sobol_samples, 97.5, axis=0)
 
 # +
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
@@ -110,12 +113,16 @@ for z, condition in enumerate(conditions):
     condition_dir = os.path.join(working_dir, 'sobol', name)
     sobol_samples = np.load(os.path.join(condition_dir, 'sobol_results.npy'))
 
-    # remove all zeros
-    nonzero_data = sobol_samples[~np.all(sobol_samples == 0, axis=1)]
+    # set all zero_data and nans to nominal values
+    for i in range(sobol_samples.shape[0]):
+        if np.all(sobol_samples[i, :] == 0):
+            sobol_samples[i, :] = nominal_results[z, :]
+        elif np.isnan(sobol_samples[i, i_sp]):
+            sobol_samples[i, :] = nominal_results[z, :]
 
-    result = plt.hist(nonzero_data[:, i_sp], 48, density=True, alpha=0.6)
-    plt.axvline(x=np.mean(nonzero_data[:, i_sp]), color=colors[0], label='Mean')
-    plt.axvline(x=np.median(nonzero_data[:, i_sp]), color='black', label='Median')
+    result = plt.hist(sobol_samples[:, i_sp], 48, density=True, alpha=0.6)
+    plt.axvline(x=np.mean(sobol_samples[:, i_sp]), color=colors[0], label='Mean')
+    plt.axvline(x=np.median(sobol_samples[:, i_sp]), color='black', label='Median')
     plt.axvline(x=nominal_results[z, i_sp], color='red', linestyle='dashed', label='Nominal Value')
 
 
@@ -125,6 +132,8 @@ for z, condition in enumerate(conditions):
     plt.legend()
     plt.show()
 # -
+
+
 
 # # Plot the final model with errorbars
 
@@ -138,8 +147,12 @@ for z, condition in enumerate(conditions):
     condition_dir = os.path.join(working_dir, 'sobol', name)
     sobol_samples = np.load(os.path.join(condition_dir, 'sobol_results.npy'))
 
-    # remove all zeros
-    nonzero_data = sobol_samples[~np.all(sobol_samples == 0, axis=1)]
+    # set all zero_data and nans to nominal values
+    for i in range(sobol_samples.shape[0]):
+        if np.all(sobol_samples[i, :] == 0):
+            sobol_samples[i, :] = nominal_results[z, :]
+        elif np.isnan(sobol_samples[i, i_sp]):
+            sobol_samples[i, :] = nominal_results[z, :]
     
     # show 95% confidence interval
     label = '_no_label'
@@ -150,7 +163,7 @@ for z, condition in enumerate(conditions):
     
 
     plt.boxplot(
-        [nonzero_data[:, i_sp]],
+        [sobol_samples[:, i_sp]],
         positions=[temperature],
         widths=5,
         showfliers=False,
@@ -174,6 +187,12 @@ with open(os.path.join(working_dir, 'sobol', conditions[2]['name'], 'problem_des
     sobol_problem = yaml.load(f, Loader=yaml.FullLoader)
 
 sobol_y = np.load(os.path.join(working_dir, 'sobol', conditions[2]['name'], 'sobol_results.npy'))
+# set all zero_data and nans to nominal values
+for i in range(sobol_y.shape[0]):
+    if np.all(sobol_y[i, :] == 0):
+        sobol_y[i, :] = nominal_results[z, :]
+    elif np.isnan(sobol_y[i, i_sp]):
+        sobol_y[i, :] = nominal_results[z, :]
 
 problem_desc_file = os.path.join(working_dir, 'sobol', conditions[2]['name'], 'problem_desc.yaml')
 with open(problem_desc_file, 'r') as f:
@@ -205,17 +224,6 @@ for i in range(len(S1_results)):
 ST_results = [(name, x) for x, name in sorted(zip(Si['ST'], sobol_problem['names']))][::-1]
 for i in range(len(ST_results)):
     print(i, ST_results[i][0], ST_results[i][1])
-# -
-
-Si['S1']
-
-# +
-a = np.array([1, 0, 1, 1, 1, 1, 7, 0, 0])
-
-np.where(a != 0)[0]
-# -
-
-problem['g_params']
 
 # +
 # show the covariance matrix used
@@ -235,6 +243,37 @@ plt.matshow(thermo_covariance_matrix_subset)
 plt.matshow(thermo_covariance_matrix_reduced)
 # -
 
-thermo_covariance_matrix_subset
+# # look at the shape of the distributions sampled
+
+# +
+thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
+g_params = problem['g_params']
+thermo_uniform_perturbations = sobol_X[:, :len(g_params)]
+L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
+assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
+z_thermo_reduced = scipy.stats.norm.ppf(thermo_uniform_perturbations)  # transform the unit uniforms to standard normals
+z_thermo = np.zeros((z_thermo_reduced.shape[0], gas.n_species))
+
+for i, sp_index in enumerate(g_params):
+    z_thermo[:, sp_index] = z_thermo_reduced[:, i]
+
+thermo_perturbations = (L_thermo @ z_thermo.T).T * 4184  # convert RMG-UQ's kcal/mol to J/mol
+
+# -
+
+for i in range(gas.n_species):
+    if np.sum(thermo_perturbations[:, i]) > 0:
+        plt.hist(thermo_perturbations[:, i], 32, density=True, alpha=0.2)
+        
+
+plt.hist(thermo_perturbations[:, 4], 32)
+
+
+
+L_thermo.shape
+
+thermo_covariance_matrix.shape
+
+gas.n_species
 
 
