@@ -140,7 +140,8 @@ def run_chunk(settings_yaml, chunk_index):
     assert perturbations.shape[1] == problem['num_vars']
 
     # -------------------- Load Morris perturbations and convert from unit uniform to actual perturbations using Nataf Transformation --------------------
-    perturbations_chunk = perturbations[chunk_index * CHUNK_SIZE: (chunk_index + 1) * CHUNK_SIZE, :]
+    maximum_index = min((chunk_index + 1) * CHUNK_SIZE, perturbations.shape[0])
+    perturbations_chunk = perturbations[chunk_index * CHUNK_SIZE: maximum_index, :]
 
     # ------------- Thermo perturbations -------------
     thermo_uniform_perturbations = perturbations_chunk[:, :len(species_list)]
@@ -157,7 +158,6 @@ def run_chunk(settings_yaml, chunk_index):
     kinetic_perturbations = (L_kinetic @ z_kinetic.T).T  # these are the perturbations in log space, so we can exponentiate to get the kinetic multipliers
     kinetic_multipliers_rmg = np.exp(kinetic_perturbations)
     kinetic_multipliers_ct = kinetic_multipliers_rmg @ ct2rmg_matrix.T  # convert from RMG reaction space to Cantera reaction space
-
 
     # save copies of all thermo for faster perturbation
     thermo_copies = []
@@ -183,7 +183,7 @@ def run_chunk(settings_yaml, chunk_index):
         for rxn_index_ct in range(gas.n_reactions):
             gas.set_multiplier(kinetic_multipliers_ct[i, rxn_index_ct], rxn_index_ct)
         try:
-            # TODO add timeout here so that if a simulation is taking too long we can skip it and move on 
+            # TODO add timeout here so that if a simulation is taking too long we can skip it and move on
             y[i, :] = run_simulation(gas, settings)
         except ct.CanteraError:
             y[i, :] = np.nan  # if the simulation fails, we can fill in NaNs and move on. The Morris analysis can handle some failed simulations as long as most of them work.
@@ -201,7 +201,7 @@ def get_results_for_morris_screen(gas, settings):
     """Do the Morris Analysis and return the contributions in sorted order"""
     raise NotImplementedError()  # this is not ready yet, we need to reassemble the results from the chunks first and then we can do the analysis. For now just return the problem_desc for the reduced set?
     # # Just return the problem_desc for the reduced set?
-    
+
     # # load the covariance matrices
     # thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
     # kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
