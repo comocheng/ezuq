@@ -165,6 +165,7 @@ def run_chunk(settings_yaml, chunk_index):
 
     problem_desc_file = os.path.join(condition_dir, 'problem_desc.yaml')
     if not os.path.exists(problem_desc_file):
+        print('No problem description file found, running full Monte Carlo sampling')
         # no problem dscription with parameter reduction was done, so this will be a full Monte Carlo sampling
         g_params = list(range(gas.n_species))
         k_params = list(range(len(reaction_list)))
@@ -173,31 +174,32 @@ def run_chunk(settings_yaml, chunk_index):
         kinetic_perturbations = rng.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix.shape[0]), cov=kinetic_covariance_matrix, size=CHUNK_SIZE)
 
     else:
+        # We are performing model reduction
         with open(problem_desc_file, 'r') as f:
             problem = yaml.load(f, Loader=yaml.FullLoader)
 
         g_params = problem['g_params']
         k_params = problem['k_params']
 
-        # This is only okay if there are no off-diagonals
-        # count the off_diagonals
         if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
             raise NotImplementedError("Parameter reduction with non-diagonal covariance matrices is not implemented yet.")
+        else:
+            # parameters are independent so we can just take a subset
 
-        # reduce the thermo covariance matrix to the species in g_params
-        thermo_covariance_matrix_subset = thermo_covariance_matrix[np.ix_(g_params, g_params)]
-        kinetic_covariance_matrix_subset = kinetic_covariance_matrix[np.ix_(k_params, k_params)]
+            # reduce the thermo covariance matrix to the species in g_params
+            thermo_covariance_matrix_subset = thermo_covariance_matrix[np.ix_(g_params, g_params)]
+            kinetic_covariance_matrix_subset = kinetic_covariance_matrix[np.ix_(k_params, k_params)]
 
-        thermo_perturbations_subset = rng.multivariate_normal(mean=np.zeros(thermo_covariance_matrix_subset.shape[0]), cov=thermo_covariance_matrix_subset, size=CHUNK_SIZE) * 4184  # convert to J/mol
-        kinetic_perturbations_subset = rng.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix_subset.shape[0]), cov=kinetic_covariance_matrix_subset, size=CHUNK_SIZE)
+            thermo_perturbations_subset = rng.multivariate_normal(mean=np.zeros(thermo_covariance_matrix_subset.shape[0]), cov=thermo_covariance_matrix_subset, size=CHUNK_SIZE) * 4184  # convert to J/mol
+            kinetic_perturbations_subset = rng.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix_subset.shape[0]), cov=kinetic_covariance_matrix_subset, size=CHUNK_SIZE)
 
-        thermo_perturbations = np.zeros((CHUNK_SIZE, gas.n_species))
-        kinetic_perturbations = np.zeros((CHUNK_SIZE, len(reaction_list)))
+            thermo_perturbations = np.zeros((CHUNK_SIZE, gas.n_species))
+            kinetic_perturbations = np.zeros((CHUNK_SIZE, len(reaction_list)))
 
-        for i, g_param in enumerate(g_params):
-            thermo_perturbations[:, g_param] = thermo_perturbations_subset[:, i]
-        for j, k_param in enumerate(k_params):
-            kinetic_perturbations[:, k_param] = kinetic_perturbations_subset[:, j]
+            for i, g_param in enumerate(g_params):
+                thermo_perturbations[:, g_param] = thermo_perturbations_subset[:, i]
+            for j, k_param in enumerate(k_params):
+                kinetic_perturbations[:, k_param] = kinetic_perturbations_subset[:, j]
 
     kinetic_multipliers = np.exp(kinetic_perturbations)
     kinetic_multipliers_ct = kinetic_multipliers.dot(ct2rmg_matrix.T)
