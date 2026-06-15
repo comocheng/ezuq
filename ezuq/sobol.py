@@ -70,6 +70,12 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
     else:
         print('No reduced model params provided, this will run sampling on the full set')
 
+        g_params = list(np.arange(len(species_list)))
+        k_params = list(np.arange(len(reaction_list)))
+
+        species_names = [x.to_chemkin() for x in species_list]
+        reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
+
         # Define the problem using SALib format
         # we need to clip the bounds to avoid infinity in the transformation to normal space.
         confidence_interval = 0.95
@@ -77,9 +83,12 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
 
         problem = {
             'num_vars': len(species_list) + len(reaction_list),
-            'names': [sp.to_chemkin() for sp in species_list] + 
-                    [rxn.to_chemkin(species_list, kinetics=False) for rxn in reaction_list],
+            'names': species_names + reaction_names,
             'bounds': [[alpha, 1 - alpha]] * (len(species_list) + len(reaction_list)),  # (slightly clipped) unit uniforms, we'll handle the actual translation to valid perturbations later on
+            'g_params': g_params,
+            'k_params': k_params,
+            'g_param_names': species_names,
+            'k_param_names': reaction_names,
         }
         with open(os.path.join(sobol_dir, 'problem_desc.yaml'), 'w') as f:
             yaml.dump(problem, f)
@@ -88,10 +97,6 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
         X = SALib.sample.sobol.sample(problem, N=N, calc_second_order=False, seed=SEED)
         print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
         np.save(os.path.join(sobol_dir, 'sobol_samples.npy'), X)
-
-
-
-    # if no Morris dir is provided, we'll run a full Monte Carlo sampling, which requires no problem description since all parameters are varied
 
     # copy the slurm script into the Sobol dir
     shutil.copyfile(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'SLURM', 'run_sobol.sh'), os.path.join(sobol_dir, 'run_sobol.sh'))
