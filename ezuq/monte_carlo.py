@@ -72,28 +72,8 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None):
                 print(f'Skipping condition {condition["name"]} since no matching Morris settings file found')
                 continue
 
-            if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
-                raise NotImplementedError("Parameter reduction with non-diagonal covariance matrices is not implemented yet.")
-            
-                # with open(morris_results_yaml, 'r') as f: 
-                #     morris_screen_result = yaml.load(f, Loader=yaml.FullLoader)
-                    
-                # # save the problem description for this condition. Different conditions will have difference reduced parameter sets
-                # monte_carlo_condition_dir = os.path.join(monte_carlo_dir, os.path.basename(condition["name"]))
-                # problem = {
-                #     'g_params': morris_screen_result['g_params'],
-                #     'k_params': morris_screen_result['k_params'],
-                #     'num_vars': len(morris_screen_result['g_params']) + len(morris_screen_result['k_params']),
-                #     'g_param_names': [species_list[i].to_chemkin() for i in morris_screen_result['g_params']],
-                #     'k_param_names': [reaction_list[i].to_chemkin(species_list, kinetics=False) for i in morris_screen_result['k_params']],
-                # }
-
-                # with open(os.path.join(monte_carlo_condition_dir, 'problem_desc.yaml'), 'w') as f:
-                #     yaml.dump(problem, f, default_flow_style=False)
-
-            else:
-                # parameters are independent, just copy the Morris screening results over
-                shutil.copyfile(morris_results_yaml, os.path.join(monte_carlo_dir, condition["name"], 'problem_desc.yaml'))
+            # copy the Morris results regardless of how we're doing the reduction
+            shutil.copyfile(morris_results_yaml, os.path.join(monte_carlo_dir, condition["name"], 'problem_desc.yaml'))
 
     # if no Morris dir is provided, we'll run a full Monte Carlo sampling, which requires no problem description since all parameters are varied
 
@@ -178,13 +158,57 @@ def run_chunk(settings_yaml, chunk_index):
         with open(problem_desc_file, 'r') as f:
             problem = yaml.load(f, Loader=yaml.FullLoader)
 
-        g_params = problem['g_params']
-        k_params = problem['k_params']
+        # if z_g_params is in problem, then we're doing model reduction in independent space
+        truncate_in_decomposed_space = 'z_g_params' in problem
 
-        if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
-            raise NotImplementedError("Parameter reduction with non-diagonal covariance matrices is not implemented yet.")
+        if truncate_in_decomposed_space:
+            if ezuq.util.is_diagonal(thermo_covariance_matrix) and ezuq.util.is_diagonal(kinetic_covariance_matrix):
+                print('Why are you decomposing a matrix thats already independent???')
+
+            z_g_params = problem['z_g_params']
+            z_k_params = problem['z_k_params']
+
+            # Decompose the covariance matrices
+            L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
+            L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+
+
+            # set the columns of L_thermo that aren't called out in z_g_params equal to zero
+            L_thermo_reduced = np.zeros_like(L_thermo)
+            for z_g in z_g_params:
+                L_thermo_reduced[:, z_g] = L_thermo[:, z_g]
+
+            L_kinetic_reduced = np.zeros_like(L_kinetic)
+            for z_k in z_k_params:
+                L_kinetic_reduced[:, z_k] = L_kinetic[:, z_k]
+
+            # Reconstruct the thermo and kinetic covariance matrices
+            reduced_thermo_covariance_matrix = L_thermo_reduced @ L_thermo_reduced.T
+            reduced_kinetic_covariance_matrix = L_kinetic_reduced @ L_kinetic_reduced.T
+
+            # figure out which physical parameters are nonzero in the reduced covariance matrix. These are the new g_params and k_params
+            g_params = [i for i in range(reduced_thermo_covariance_matrix.shape[0]) if reduced_thermo_covariance_matrix[i, i] != 0]
+            k_params = [i for i in range(reduced_kinetic_covariance_matrix.shape[0]) if reduced_kinetic_covariance_matrix[i, i] != 0]
+
+            # reduce the thermo covariance matrix to the species in g_params
+            thermo_covariance_matrix_subset = thermo_covariance_matrix[np.ix_(g_params, g_params)]
+            kinetic_covariance_matrix_subset = kinetic_covariance_matrix[np.ix_(k_params, k_params)]
+
+            thermo_perturbations_subset = rng.multivariate_normal(mean=np.zeros(thermo_covariance_matrix_subset.shape[0]), cov=thermo_covariance_matrix_subset, size=CHUNK_SIZE) * 4184  # convert to J/mol
+            kinetic_perturbations_subset = rng.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix_subset.shape[0]), cov=kinetic_covariance_matrix_subset, size=CHUNK_SIZE)
+
+            thermo_perturbations = np.zeros((CHUNK_SIZE, gas.n_species))
+            kinetic_perturbations = np.zeros((CHUNK_SIZE, len(reaction_list)))
+
+            for i, g_param in enumerate(g_params):
+                thermo_perturbations[:, g_param] = thermo_perturbations_subset[:, i]
+            for j, k_param in enumerate(k_params):
+                kinetic_perturbations[:, k_param] = kinetic_perturbations_subset[:, j]
+
         else:
             # parameters are independent so we can just take a subset
+            g_params = problem['g_params']
+            k_params = problem['k_params']
 
             # reduce the thermo covariance matrix to the species in g_params
             thermo_covariance_matrix_subset = thermo_covariance_matrix[np.ix_(g_params, g_params)]
