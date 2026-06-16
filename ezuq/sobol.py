@@ -15,6 +15,7 @@ import scipy.stats
 
 import SALib.analyze.sobol
 import SALib.sample.sobol
+import scipy.stats.qmc
 
 import ezuq.util
 from ezuq.simulation.jsr import run_simulation
@@ -105,36 +106,51 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
 
     else:
         print('No reduced model params provided, this will run sampling on the full set')
-
         g_params = list(range(len(species_list)))
         k_params = list(range(len(reaction_list)))
 
         species_names = [x.to_chemkin() for x in species_list]
         reaction_names = [x.to_chemkin(species_list, kinetics=False) for x in reaction_list]
 
-        # Define the problem using SALib format
-        # we need to clip the bounds to avoid infinity in the transformation to normal space.
-        alpha = (1 - CONFIDENCE_INTERVAL) / 2
+        if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
+            # Kucherenko 2012 sampling setup
 
-        problem = {
-            'num_vars': len(species_list) + len(reaction_list),
-            'names': species_names + reaction_names,
-            'bounds': [[alpha, 1 - alpha]] * (len(species_list) + len(reaction_list)),  # (slightly clipped) unit uniforms, we'll handle the actual translation to valid perturbations later on
-            'g_params': g_params,
-            'k_params': k_params,
-            'g_param_names': species_names,
-            'k_param_names': reaction_names,
-            'model_reduction': False
-        }
-        for condition in conditions:
-            sobol_condition_dir = os.path.join(sobol_dir, condition['name'])
-            with open(os.path.join(sobol_condition_dir, 'problem_desc.yaml'), 'w') as f:
-                yaml.dump(problem, f, default_flow_style=False)
+            # can't use saltelli scheme, have to do this mostly from scratch
+            k = len(g_params) + len(k_params)
+            sampler = scipy.stats.qmc.Sobol(d=2*k, scramble=True, seed=SEED)
+            N_power = np.log2(N)
+            assert 2 ** N_power == int(N), 'N must be a power of 2'
+            u_all = sampler.random_base2(m=int(N_power))
 
-        # Generate Sobol samples (takes a minute)
-        X = SALib.sample.sobol.sample(problem, N=N, calc_second_order=False, seed=SEED)
-        print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
-        np.save(os.path.join(sobol_dir, 'sobol_samples_unreduced.npy'), X)
+            # we're just going to generate u and u_prime here and save them as u_all. Then run_chunk will do all the calculations
+            print(f'Generated {u_all.shape[0]} samples with 2*{int(u_all.shape[1] / 2)} variables')
+            np.save(os.path.join(sobol_dir, 'sobol_samples_u_all.npy'), u_all)
+        else:
+            # covariance matrices are independent, so sampling is straightforward transformation from uniform distribution to normal
+
+            # Define the problem using SALib format
+            # we need to clip the bounds to avoid infinity in the transformation to normal space.
+            alpha = (1 - CONFIDENCE_INTERVAL) / 2
+
+            problem = {
+                'num_vars': len(species_list) + len(reaction_list),
+                'names': species_names + reaction_names,
+                'bounds': [[alpha, 1 - alpha]] * (len(species_list) + len(reaction_list)),  # (slightly clipped) unit uniforms, we'll handle the actual translation to valid perturbations later on
+                'g_params': g_params,
+                'k_params': k_params,
+                'g_param_names': species_names,
+                'k_param_names': reaction_names,
+                'model_reduction': False
+            }
+            for condition in conditions:
+                sobol_condition_dir = os.path.join(sobol_dir, condition['name'])
+                with open(os.path.join(sobol_condition_dir, 'problem_desc.yaml'), 'w') as f:
+                    yaml.dump(problem, f, default_flow_style=False)
+
+            # Generate Sobol samples (takes a minute)
+            X = SALib.sample.sobol.sample(problem, N=N, calc_second_order=False, seed=SEED)
+            print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
+            np.save(os.path.join(sobol_dir, 'sobol_samples_unreduced.npy'), X)
 
     # copy the slurm script into the Sobol dir
     shutil.copyfile(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'SLURM', 'run_sobol.sh'), os.path.join(sobol_dir, 'run_sobol.sh'))
@@ -352,7 +368,145 @@ def run_chunk(settings_yaml, chunk_index):
 
     else:
         # Covariance matrices are not diagonal/independent
-        raise NotImplementedError()
+        # figure out if we're doing model reduction
+        if 'model_reduction' in problem and problem['model_reduction'] == True:
+            print('Dependent parameters and model reduction')
+            raise NotImplementedError()
+        else:
+            # no model reduction
+            # Kucherenko 2012 sampling method
+            print('Dependent parameters with no model reduction')
+
+            def f(x):
+                # this is the function that takes in the samples in normal space and outputs the simulation results.
+                # this should really be used in every one of these sampling functions
+                # TODO, refactor all code to use this. Put it in JSR
+                y = np.zeros((x.shape[0], gas.n_species))
+                thermo_perturbations = x[:, :thermo_covariance_matrix.shape[0]] * 4184  # convert RMG-UQ's kcal/mol to J/mol
+                kinetic_perturbations = x[:, thermo_covariance_matrix.shape[0]:]  # these are the perturbations in log space, so we can exponentiate to get the kinetic multipliers
+                kinetic_multipliers_rmg = np.exp(kinetic_perturbations)
+                kinetic_multipliers_ct = kinetic_multipliers_rmg @ ct2rmg_matrix.T  # convert from RMG reaction space to Cantera reaction space
+
+                for i in range(x.shape[0]):
+                    # perturb all the species
+                    for sp_index in range(gas.n_species):
+                        perturbed_sp = ezuq.util.perturb_species_ct(gas.species()[sp_index], thermo_perturbations[i, sp_index])
+                        gas.modify_species(sp_index, perturbed_sp)
+
+                    # set multipliers
+                    for rxn_index_ct in range(gas.n_reactions):
+                        gas.set_multiplier(kinetic_multipliers_ct[i, rxn_index_ct], rxn_index_ct)
+                    try:
+                        y[i, :] = run_simulation(gas, settings)
+                    except ct.CanteraError:
+                        y[i, :] = np.nan
+
+                    # Reset things
+                    for sp_index in range(gas.n_species):
+                        gas.modify_species(sp_index, thermo_copies[sp_index])
+                    gas.set_multiplier(1.0)
+
+                output_species_index = settings['output_species_index']
+                return y[:, output_species_index]
+
+            k = thermo_covariance_matrix.shape[0] + kinetic_covariance_matrix.shape[0]
+
+            # make a combined covariance matrix so we can do the sampling in one step
+            cov = np.zeros((k, k))
+            cov[:thermo_covariance_matrix.shape[0], :thermo_covariance_matrix.shape[0]] = thermo_covariance_matrix
+            cov[thermo_covariance_matrix.shape[0]:, thermo_covariance_matrix.shape[0]:] = kinetic_covariance_matrix
+            L = np.linalg.cholesky(cov)
+            assert np.isclose(L @ L.T, cov).all()
+
+            mean = np.zeros(k)
+
+            u_all = np.load(os.path.join(sobol_dir, 'sobol_samples_u_all.npy'))
+
+            if chunk_index * CHUNK_SIZE >= u_all.shape[0]:
+                print(f"Chunk index {chunk_index} is out of range for number of samples {u_all.shape[0]} with chunk size {CHUNK_SIZE}")
+                exit(0)
+
+            # reduce the uniform Sobol samples to their relevant chunk
+            maximum_index = min((chunk_index + 1) * CHUNK_SIZE, u_all.shape[0])
+            u_all = u_all[chunk_index * CHUNK_SIZE: maximum_index, :]
+            N = u_all.shape[0]
+            all_N_indices = np.arange(N)
+
+            # 1. Partition the Sobol samples into u and u_prime
+            u = u_all[:, :k]
+            u_prime = u_all[:, k:]
+
+            # 2. Generate unit normals from unit uniform Sobol samples
+            x_tilde = scipy.stats.norm.ppf(u)
+            x_tilde_prime = scipy.stats.norm.ppf(u_prime)
+
+            x = x_tilde @ L.T + mean  # L does not equal its transpose, so you have to be really careful here. check that you're recreating the cov matrix
+            x_prime = x_tilde_prime @ L.T + mean
+
+            f_y_z = f(x)
+            f_x_y_filename = os.path.join(results_dir, f'f_x_y_{chunk_index:04}.npy')
+            np.save(f_x_y_filename, f_y_z)
+            f_y_prime_z_prime = f(x_prime)
+            f_x_prime_y_prime_filename = os.path.join(results_dir, f'f_x_prime_y_prime_{chunk_index:04}.npy')
+            np.save(f_x_prime_y_prime_filename, f_y_prime_z_prime)
+            # don't compute variance D until all chunks have been computed
+
+
+            f_y_z_bar_prime = np.zeros((N, k))
+            f_y_bar_prime_z = np.zeros((N, k))
+            for q in range(k):
+                y_indices = [q]  # compute 1st order index on first parameter
+                z_indices = list(set(np.arange(k)) - set(y_indices))
+
+                # partition the mean and covariance matrices
+                # mean is zero for all of these
+                mu_y = mean[y_indices]
+                mu_z = mean[z_indices]
+                Sigma_y  = cov[np.ix_(y_indices, y_indices)]
+                Sigma_z  = cov[np.ix_(z_indices, z_indices)]
+                Sigma_yz = cov[np.ix_(y_indices, z_indices)]
+                Sigma_zy = cov[np.ix_(z_indices, y_indices)]
+
+                Sigma_y_inv = np.linalg.inv(Sigma_y)
+                Sigma_z_inv = np.linalg.inv(Sigma_z)
+
+                Sigma_zc = Sigma_z - Sigma_zy @ Sigma_y_inv @ Sigma_yz
+                Sigma_yc = Sigma_y - Sigma_yz @ Sigma_z_inv @ Sigma_zy
+
+                A_zc = np.linalg.cholesky(Sigma_zc)
+                A_yc = np.linalg.cholesky(Sigma_yc)
+
+                v_prime = u_prime[np.ix_(all_N_indices, y_indices)]
+                w_prime = u_prime[np.ix_(all_N_indices, z_indices)]
+
+                # 3. Generate unconditional normals
+ 
+                # split into subsets
+                y = x[np.ix_(all_N_indices, y_indices)]
+                z = x[np.ix_(all_N_indices, z_indices)]
+
+                # 4. Generate conditional normals
+                mu_zc = np.tile(mu_z.T, (N, 1)) + (Sigma_zy @ Sigma_y_inv @ (y - np.tile(mu_y.T, (N, 1))).T).T
+                mu_yc = np.tile(mu_y.T, (N, 1)) + (Sigma_yz @ Sigma_z_inv @ (z - np.tile(mu_z.T, (N, 1))).T).T
+
+                # partition the standard normals
+                y_tilde_prime = scipy.stats.norm.ppf(v_prime)
+                z_tilde_prime = scipy.stats.norm.ppf(w_prime)
+
+                y_bar_prime = y_tilde_prime @ A_yc.T + mu_yc
+                z_bar_prime = z_tilde_prime @ A_zc.T + mu_zc
+
+                y_z_bar_prime = np.concatenate((y, z_bar_prime), axis=1)
+                y_bar_prime_z = np.concatenate((y_bar_prime, z), axis=1)
+
+                # Evaluate functions
+                f_y_z_bar_prime[:, q] = f(y_z_bar_prime)
+                f_y_bar_prime_z = f(y_bar_prime_z)
+
+            f_y_z_bar_prime_filename = os.path.join(results_dir, f'f_y_z_bar_prime_{chunk_index:04}.npy')
+            np.save(f_y_z_bar_prime_filename, f_y_z_bar_prime)
+            f_y_bar_prime_z_filename = os.path.join(results_dir, f'f_y_bar_prime_z_{chunk_index:04}.npy')
+            np.save(f_y_bar_prime_z_filename, f_y_bar_prime_z)
 
 
 def reassemble_chunks(condition_dir):
