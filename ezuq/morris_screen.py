@@ -255,11 +255,53 @@ def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, ve
                 morris_y[i, :] = nominal_values
 
         if truncate_in_decomposed_space:
-            raise NotImplementedError()
+            # the problem names should now be the L_matrix indices
+            z_sp_names = [f'L_thermo_{i:04}' for i in range(L_thermo.shape[0])]
+            z_rxn_names = [f'L_kinetic_{i:04}' for i in range(L_kinetic.shape[0])]
+            z_space_names = z_sp_names + z_rxn_names
+
+            problem['names'] = z_space_names
+            independent_result = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
+            contributions = [(x, y) for y, x in sorted(zip(independent_result['mu_star'].data, problem['names']))][::-1]
+
+            # define the tolerance for considering a parameter to be irrelevant
+            threshold = mu_star_threshold * contributions[0][1]  # use 0.01 for tighter tolerance
+            z_g_params = []
+            z_k_params = []
+            for i in range(len(contributions)):
+                if contributions[i][1] < threshold:
+                    if verbose:
+                        print(f'Reduced to {i} params')
+                    break
+            
+                name = contributions[i][0]
+                if verbose:
+                    print(i, name)
+                if name in z_sp_names:
+                    z_g_params.append(z_sp_names.index(name))
+                elif name in z_rxn_names:
+                    z_k_params.append(z_rxn_names.index(name))
+                else:
+                    raise ValueError(f'could not identify parameter with name {name}')
+
+            # save the problem description for this condition. Different conditions will have difference reduced parameter sets
+            morris_screen_result = {
+                'z_g_params': z_g_params,
+                'z_k_params': z_k_params,
+                'num_vars': len(z_g_params) + len(z_k_params),
+                'z_g_param_names': [z_sp_names[i] for i in z_g_params],
+                'z_k_param_names': [z_rxn_names[i] for i in z_k_params],
+            }
+            
+            with open(os.path.join(morris_dir, condition['name'], 'morris_screen_set.yaml'), 'w') as f:
+                yaml.dump(morris_screen_result, f, default_flow_style=False)
+
+            contribution_results[condition['name']] = independent_result
+
         else:
             # parameters are independent (or we're going to treat them like they are). reduce in physical parameter space (as opposed to decomposed space)
             physical_result = SALib.analyze.morris.analyze(problem, w, morris_y[:, i_sens], scaled=True)
-            # independent_result = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
+            
 
             # Rank parameter names by mean effect
             contributions = [(x, y) for y, x in sorted(zip(physical_result['mu_star'].data, problem['names']))][::-1]
