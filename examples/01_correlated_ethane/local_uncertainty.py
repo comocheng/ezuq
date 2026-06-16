@@ -15,6 +15,7 @@
 
 # +
 import os
+import glob
 import shutil
 import yaml
 import csv
@@ -42,9 +43,23 @@ cantera_file = 'chem_annotated.yaml'
 with open('ct2rmg_rxn.pickle', 'rb') as f:
     ct2rmg_rxn = pickle.load(f)
 
+try:
+    REPO_DIR = os.environ['UQ_REFORMULATION_REPO']
+except KeyError:
+    REPO_DIR = '/scratch/harris.se/guassian_scratch/uq_reformulation_paper/'
+
+
+family_dirs = glob.glob(os.path.join(REPO_DIR, '03_BMKinetics_Covariances', 'yes_rank_calc', '*'))
+family_dirs = sorted([x for x in family_dirs if os.path.isdir(x)])
+display(family_dirs)
+
+
 # Initialize the Uncertainty class instance and load the model
 # sensitivities have been copied over to the 04_Local_Uncertainty folder so plots generated don't crowd the 02_JSR_sensitivities folder
-uncertainty = rmgpy.tools.uncertainty.Uncertainty(output_directory='../ethane/')
+uncertainty = rmgpy.tools.uncertainty.Uncertainty(
+    output_directory='../ethane/',
+    kinetic_covariance_rules=family_dirs,
+)
 uncertainty.load_model(chemkin_file, dict_file)
 
 # -
@@ -60,7 +75,7 @@ uncertainty.load_database(
 )
 
 uncertainty.extract_sources_from_model()
-uncertainty.assign_parameter_uncertainties(correlated=False, use_rank=False)
+uncertainty.assign_parameter_uncertainties(correlated=True, use_rank=True)
 
 
 # # Pick a sensitive species and do local analysis
@@ -89,7 +104,7 @@ np.save('thermo_covariance_matrix.npy', thermo_covariance_matrix)
 np.save('kinetic_covariance_matrix.npy', kinetic_covariance_matrix)
 # -
 
-variances = uncertainty.get_variance_across_x(sensitive_species[0])
+variances = uncertainty.get_variance_across_x(sensitive_species[0], correlated=True)
 
 # # plot the species concentration with and without error bars
 
@@ -136,11 +151,17 @@ plt.yscale('log')
 
 plt.show()
 # -
+plt.matshow(kinetic_covariance_matrix)
+
+
+
+
+
 # ### Describe top contributors at a specific temperature
 
 # +
 temperature = 800
-output = uncertainty.local_analysis(sensitive_species=sensitive_species, correlated=False, t=temperature)
+output = uncertainty.local_analysis(sensitive_species=sensitive_species, correlated=True, t=temperature)
 var, reaction_delta, species_delta = output[sensitive_species[0]]
 
 print(rmgpy.tools.uncertainty.process_local_results(output, sensitive_species, number=10)[1])
