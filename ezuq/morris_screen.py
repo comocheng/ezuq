@@ -197,10 +197,13 @@ def run_chunk(settings_yaml, chunk_index):
     np.save(output_filename, y)
 
 
-def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, verbose=True):
+def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, verbose=True, truncate_in_decomposed_space=True):
     """After we analyze the Morris results, we can save the reduced set of parameters that we want to use for the full global sampling
     
     mu_star_threshold is the threshold for considering a parameter to be irrelevant. If a parmeter's mu_star is less than mu_star_threshold * max(mu_star), it gets left out of the reduced set
+    
+    truncate_in_decomposed_space is an option that decides whether we reduce the model in physical parameter space or in the Cholesky decomposed space
+    If true, it will respect correlations between parameters
     """
     
     morris_dir = os.path.join(working_dir, 'morris_screen')
@@ -218,6 +221,10 @@ def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, ve
     # load the covariance matrices
     thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
     kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
+
+    # if physical parameters are independent, we will always decompose them in physical space as opposed to decomposed space
+    if ezuq.util.is_diagonal(thermo_covariance_matrix) and ezuq.util.is_diagonal(kinetic_covariance_matrix):
+        truncate_in_decomposed_space = False
 
     # Transform the Morris samples from unit uniform to standard normal
     z = scipy.stats.norm.ppf(morris_samples)
@@ -247,10 +254,10 @@ def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, ve
             if np.isnan(morris_y[i, :]).any():
                 morris_y[i, :] = nominal_values
 
-        if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
+        if truncate_in_decomposed_space:
             raise NotImplementedError()
         else:
-            # parameters are independent. reduce in physical parameter space (as opposed to decomposed space)
+            # parameters are independent (or we're going to treat them like they are). reduce in physical parameter space (as opposed to decomposed space)
             physical_result = SALib.analyze.morris.analyze(problem, w, morris_y[:, i_sens], scaled=True)
             # independent_result = SALib.analyze.morris.analyze(problem, z, morris_y[:, i_sens], scaled=False)
 
