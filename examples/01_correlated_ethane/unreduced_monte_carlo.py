@@ -13,7 +13,7 @@
 #     name: python3
 # ---
 
-# # Demo of Monte Carlo with Model Reduction
+# # Demo of Monte Carlo with no Model Reduction
 
 # +
 import os
@@ -52,7 +52,7 @@ X = f'{gas.species_names[i_C2H6]}: {x_C2H6}, {gas.species_names[i_O2]}: {x_O2}, 
 conditions = []
 for T in temperatures:
     conditions.append({
-        'name': f'{T}K',        # name for the directory where analysis will be run
+        'name': f'unreduced_{T}K',        # name for the directory where analysis will be run
         'temperature': T,       # K
         'pressure': ct.one_atm, # Pa
         'composition': X,
@@ -61,7 +61,7 @@ for T in temperatures:
     })
 
 # Here we reduce the number of samples for much faster runtime, but you'll probably want to do ~100
-ezuq.monte_carlo.setup_runfiles(working_dir, conditions, i_sens=14)
+ezuq.monte_carlo.setup_runfiles(working_dir, conditions, morris_dir=None, i_sens=14)
 # -
 
 # # RUN THE SIMS (takes a minute or so)
@@ -71,17 +71,17 @@ for condition in conditions:
 
     my_settings_file = os.path.join(condition_dir, 'settings.yaml')
     print(f'Running sims for {condition["name"]}')
-    for i in range(4):
+    for i in range(16):
         subprocess.check_call(['python', '-m', 'ezuq.monte_carlo', my_settings_file, str(i)])
 
-# 1000K takes longer to converge
-for condition in [conditions[2]]:
-    condition_dir = os.path.join(working_dir, 'monte_carlo', condition['name'])
+# +
+# 800K needs some extra runs
 
-    my_settings_file = os.path.join(condition_dir, 'settings.yaml')
-    print(f'Running sims for {condition["name"]}')
-    for i in range(8, 20):
-        subprocess.check_call(['python', '-m', 'ezuq.monte_carlo', my_settings_file, str(i)])
+condition_dir = os.path.join(working_dir, 'monte_carlo', conditions[0]['name'])
+my_settings_file = os.path.join(condition_dir, 'settings.yaml')
+for i in range(4, 20):
+    subprocess.check_call(['python', '-m', 'ezuq.monte_carlo', my_settings_file, str(i)])
+# -
 
 # ## reassemble
 
@@ -172,8 +172,8 @@ for z, condition in enumerate(conditions):
     name = condition['name']
     condition_dir = os.path.join(working_dir, 'monte_carlo', name)
     monte_carlo_samples = np.load(os.path.join(condition_dir, 'monte_carlo_results.npy'))
-    lower95[z, :] = np.percentile(monte_carlo_samples, 2.5, axis=0)
-    upper95[z, :] = np.percentile(monte_carlo_samples, 97.5, axis=0)
+    lower95[z, :] = np.nanpercentile(monte_carlo_samples, 2.5, axis=0)
+    upper95[z, :] = np.nanpercentile(monte_carlo_samples, 97.5, axis=0)
 
 # # Plot individual distributions
 
@@ -186,11 +186,18 @@ for z, condition in enumerate(conditions):
 
     # remove all zeros
     nonzero_data = monte_carlo_samples[~np.all(monte_carlo_samples == 0, axis=1)]
-    nonzero_data = nonzero_data[~np.isnan(nonzero_data[:, i_sp])]
+
 
     result = plt.hist(nonzero_data[:, i_sp], 48, density=True, alpha=0.6)
     plt.axvline(x=np.mean(nonzero_data[:, i_sp]), color=colors[0], label='Mean')
     plt.axvline(x=np.median(nonzero_data[:, i_sp]), color='black', label='Median')
+    
+    # Log scale for x axis is a bit confusing
+    # bins = np.geomspace(nonzero_data[:, i_sp].min(), nonzero_data[:, i_sp].max(), 64)
+    # result = plt.hist(nonzero_data[:, i_sp], bins=bins, density=True, alpha=0.6)
+    # plt.axvline(x=np.mean(nonzero_data[:, i_sp]), color=colors[0], label='Mean')
+    # plt.axvline(x=np.median(nonzero_data[:, i_sp]), color='black', label='Median')
+    # plt.xscale('log')
 
     plt.title(f'{gas.species_names[i_sp]} PDF - {name}')
     plt.xlabel('Mole Fraction')
@@ -199,8 +206,6 @@ for z, condition in enumerate(conditions):
     plt.show()
 
 # # Plot our final model with errorbars
-
-# +
 
 temperatures = [c['temperature'] for c in conditions]
 plt.plot(temperatures, nominal_results[:, i_sp], label='Nominal Value')
@@ -212,6 +217,7 @@ for z, condition in enumerate(conditions):
 
     # remove all zeros
     nonzero_data = monte_carlo_samples[~np.all(monte_carlo_samples == 0, axis=1)]
+    nonzero_data = nonzero_data[~np.isnan(nonzero_data[:, i_sp])]
     
     # show 95% confidence interval
     label = '_no_label'
@@ -233,18 +239,35 @@ plt.title(f'{gas.species_names[i_sp]} Concentration')
 plt.xlabel('Temperature (K)')
 plt.ylabel('Mole Fraction')
 plt.legend()
-# -
 
 print(lower95)
 
 # +
-# Plot the reduced matrix for sampling
+# Compare pdfs
 
-# reduce the thermo covariance matrix to the species in g_params
-thermo_covariance_matrix_subset = thermo_covariance_matrix[np.ix_(g_params, g_params)]
-kinetic_covariance_matrix_subset = kinetic_covariance_matrix[np.ix_(k_params, k_params)]
+uncorrelated_samples = np.load('../00_uncorrelated_ethane/monte_carlo/unreduced_900K/monte_carlo_results.npy')
+correlated_samples = np.load('monte_carlo/unreduced_900K/monte_carlo_results.npy')
 
-thermo_perturbations_subset = rng.multivariate_normal(mean=np.zeros(thermo_covariance_matrix_subset.shape[0]), cov=thermo_covariance_matrix_subset, size=CHUNK_SIZE) * 4184  # convert to J/mol
-kinetic_perturbations_subset = rng.multivariate_normal(mean=np.zeros(kinetic_covariance_matrix_subset.shape[0]), cov=kinetic_covariance_matrix_subset, size=CHUNK_SIZE)
+# remove all zeros
+uncorrelated_samples = uncorrelated_samples[~np.all(uncorrelated_samples == 0, axis=1)]
+uncorrelated_samples = uncorrelated_samples[~np.isnan(uncorrelated_samples[:, i_sp])]
+
+correlated_samples = correlated_samples[~np.all(correlated_samples == 0, axis=1)]
+correlated_samples = correlated_samples[~np.isnan(correlated_samples[:, i_sp])]
+
+
+result = plt.hist(uncorrelated_samples[:, i_sp], 72, density=True, color=colors[0], histtype='step', label='Uncorrelated')
+result = plt.hist(correlated_samples[:, i_sp], 72, density=True, color=colors[1], histtype='step', label='Correlated')
+# plt.axvline(x=np.mean(uncorrelated_samples[:, i_sp]), color=colors[0], label='Mean')
+plt.axvline(x=np.median(nominal_results[1, i_sp]), color='black', label='Nominal Value', linewidth=0.4)
+
+
+plt.title(f'{gas.species_names[i_sp]} PDF - 900K')
+plt.xlabel('Mole Fraction')
+plt.ylabel('Density')
+plt.legend()
+plt.show()
+# -
+
 
 
