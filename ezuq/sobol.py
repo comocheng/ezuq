@@ -21,7 +21,8 @@ from ezuq.simulation.jsr import run_simulation
 
 CHUNK_SIZE = 1000
 
-CONFIDENCE_INTERVAL = 0.95
+CONFIDENCE_INTERVAL = 0.9999999980268247  # 6 sigma
+
 
 def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024, SEED=400):
     """Set up the runfiles for Sobol Sampling
@@ -48,7 +49,6 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
     thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
     kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
 
-
     # confirm this matches the RMG mechanism
     chemkin_file = os.path.join(working_dir, 'chem_annotated.inp')
     dictionary_file = os.path.join(working_dir, 'species_dictionary.txt')
@@ -60,7 +60,7 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
     gas = ct.Solution(cantera_file)
     with open(os.path.join(working_dir, 'ct2rmg_rxn.pickle'), 'rb') as f:
         ct2rmg_rxn = pickle.load(f)
-    
+
     assert gas.n_species == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species in Cantera mechanism"
     assert gas.n_reactions == len(ct2rmg_rxn), "Kinetic covariance matrix size does not match number of reactions in Cantera mechanism"
     assert len(set(ct2rmg_rxn.values())) == len(reaction_list), "Reactions in Cantera mechanism do not match reactions in RMG mechanism"
@@ -83,7 +83,7 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
             g_param_names = morris_screen_result['g_param_names']
             k_param_names = morris_screen_result['k_param_names']
 
-            alpha = (1 - CONFIDENCE_INTERVAL) / 2
+            alpha = float((1 - CONFIDENCE_INTERVAL) / 2)
             problem = {
                 'num_vars': len(g_params) + len(k_params),
                 'names': g_param_names + k_param_names,

@@ -36,7 +36,13 @@ import ezuq.simulation
 import SALib.analyze.sobol
 
 # +
-# ezuq.sobol.CONFIDENCE_INTERVAL = 0.99
+# sigma = -6.0
+# alpha = scipy.stats.norm.cdf(sigma)
+# ezuq.sobol.CONFIDENCE_INTERVAL = 1.0 - (alpha * 2.0)
+# print(ezuq.sobol.CONFIDENCE_INTERVAL)
+
+# a = (1 - ezuq.sobol.CONFIDENCE_INTERVAL) / 2
+# print(scipy.stats.norm.ppf(a))
 # -
 
 working_dir = os.path.abspath('.')
@@ -66,7 +72,7 @@ for T in temperatures:
     })
 
 # Here we reduce the number of samples for much faster runtime, but you'll probably want to do ~1024
-ezuq.sobol.setup_runfiles(working_dir, conditions, i_sens=14, N=256)
+ezuq.sobol.setup_runfiles(working_dir, conditions, i_sens=14, N=512)
 # -
 
 # # RUN THE SIMS
@@ -76,7 +82,17 @@ for condition in conditions:
 
     my_settings_file = os.path.join(condition_dir, 'settings.yaml')
     print(f'Running sims for {condition["name"]}')
-    for i in range(6):
+    for i in range(11):
+        
+        subprocess.check_call(['python', '-m', 'ezuq.sobol', my_settings_file, str(i)])
+
+# just rerun 900K
+for condition in [conditions[1]]:
+    condition_dir = os.path.join(working_dir, 'sobol', condition['name'])
+
+    my_settings_file = os.path.join(condition_dir, 'settings.yaml')
+    print(f'Running sims for {condition["name"]}')
+    for i in range(10):
         
         subprocess.check_call(['python', '-m', 'ezuq.sobol', my_settings_file, str(i)])
 
@@ -132,9 +148,6 @@ for z, condition in enumerate(conditions):
     plt.legend()
     plt.show()
 # -
-
-
-
 # # Plot the final model with errorbars
 
 # +
@@ -177,6 +190,12 @@ plt.legend()
 # -
 
 print(lower95)
+
+scipy.stats.norm.ppf(0.025)
+
+scipy.stats.norm.ppf(0.975)
+
+(1 - .95) / 2
 
 # # Look at some rankings
 
@@ -264,7 +283,7 @@ thermo_perturbations = (L_thermo @ z_thermo.T).T * 4184  # convert RMG-UQ's kcal
 for i in range(gas.n_species):
     if np.sum(thermo_perturbations[:, i]) > 0:
         plt.hist(thermo_perturbations[:, i], 32, density=True, alpha=0.2)
-        
+
 
 plt.hist(thermo_perturbations[:, 4], 32)
 
