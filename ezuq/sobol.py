@@ -120,6 +120,7 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
                 print(f'Generated {u_all.shape[0]} samples with 2*{int(u_all.shape[1] / 2)} variables')
                 np.save(os.path.join(sobol_condition_dir, 'sobol_samples_u_all.npy'), u_all)
                 problem = {
+                    'names': [species_list[i].to_chemkin() for i in new_g_params] + [reaction_list[i].to_chemkin(species_list, kinetics=False) for i in new_k_params],
                     'num_vars': len(new_g_params) + len(new_k_params),
                     'new_g_params': new_g_params,
                     'new_k_params': new_k_params,
