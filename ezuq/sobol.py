@@ -501,7 +501,7 @@ def run_chunk(settings_yaml, chunk_index):
 
                 # Evaluate functions
                 f_y_z_bar_prime[:, q] = f(y_z_bar_prime)
-                f_y_bar_prime_z = f(y_bar_prime_z)
+                f_y_bar_prime_z[:, q] = f(y_bar_prime_z)
 
             f_y_z_bar_prime_filename = os.path.join(results_dir, f'f_y_z_bar_prime_{chunk_index:04}.npy')
             np.save(f_y_z_bar_prime_filename, f_y_z_bar_prime)
