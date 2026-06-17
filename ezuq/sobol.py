@@ -80,8 +80,56 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
                 morris_screen_result = yaml.load(f, Loader=yaml.FullLoader)
 
             if 'z_g_params' in morris_screen_result:
-                # Not sure how to do a truncation in decomposed space
-                raise NotImplementedError()
+                print('Dependent parameters with model truncated in decomposed space')
+                # you have to do the truncation to figure out how many parameters needed for u_all
+
+                # do the truncation to figure out how many parameters will be left, but we still do the slicing of the covariance matrix in physical space? I don't know
+                L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
+                L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+
+                L_thermo_zeroed = np.zeros_like(L_thermo)
+                for z_g_param in morris_screen_result['z_g_params']:
+                    L_thermo_zeroed[:, z_g_param] = L_thermo[:, z_g_param]
+                new_thermo_covariance_matrix = L_thermo_zeroed @ L_thermo_zeroed.T
+
+                L_kinetic_zeroed = np.zeros_like(L_kinetic)
+                for z_k_param in morris_screen_result['z_k_params']:
+                    L_kinetic_zeroed[:, z_k_param] = L_kinetic[:, z_k_param]
+                new_kinetic_covariance_matrix = L_kinetic_zeroed @ L_kinetic_zeroed.T
+
+                # count up the nonzero results
+                new_g_params = []
+                threshold = 1e-6  # anything that contributes less than this is excluded
+                for i in range(new_thermo_covariance_matrix.shape[0]):
+                    if new_thermo_covariance_matrix[i, i] > threshold:
+                        new_g_params.append(i)
+                new_k_params = []
+                for i in range(new_kinetic_covariance_matrix.shape[0]):
+                    if new_kinetic_covariance_matrix[i, i] > threshold:
+                        new_k_params.append(i)
+
+                print(f'Converted from {len(morris_screen_result["z_k_params"]) + len(morris_screen_result["z_g_params"])} decomposed params to {len(new_k_params) + len(new_g_params)} physical params')
+
+                k = len(new_g_params) + len(new_k_params)
+                sampler = scipy.stats.qmc.Sobol(d=2*k, scramble=True, seed=SEED)
+                N_power = np.log2(N)
+                assert 2 ** N_power == int(N), 'N must be a power of 2'
+                u_all = sampler.random_base2(m=int(N_power))
+
+                # we're just going to generate u and u_prime here and save them as u_all. Then run_chunk will do all the calculations
+                print(f'Generated {u_all.shape[0]} samples with 2*{int(u_all.shape[1] / 2)} variables')
+                np.save(os.path.join(sobol_condition_dir, 'sobol_samples_u_all.npy'), u_all)
+                problem = {
+                    'num_vars': len(new_g_params) + len(new_k_params),
+                    'new_g_params': new_g_params,
+                    'new_k_params': new_k_params,
+                    'z_g_params': morris_screen_result['z_g_params'],
+                    'z_k_params': morris_screen_result['z_k_params'],
+                    'model_reduction': True
+                }
+                with open(os.path.join(sobol_condition_dir, 'problem_desc.yaml'), 'w') as f:
+                    yaml.dump(problem, f, default_flow_style=False)
+
 
             else:  # we're truncating in physical parameter space
                 g_params = morris_screen_result['g_params']
@@ -391,186 +439,171 @@ def run_chunk(settings_yaml, chunk_index):
         # figure out if we're doing model reduction
         if 'model_reduction' in problem and problem['model_reduction'] == True:
             print('Dependent parameters and model reduction')
-
+            results_dir = os.path.join(condition_dir, 'sobol_conditional_y')
+            os.makedirs(results_dir, exist_ok=True)
 
             # Now figure out what style truncation we're doing. Correlated or uncorrelated
-
             if 'z_g_params' in problem:
-                # truncate in decomposed space
-                raise NotImplementedError('Truncating in decomposed space not implemented')
+                # truncation in decomposed space translated back to physical parameters
+                print('Dependent parameters with model truncated in decomposed space')
+                # you have to do the truncation to figure out how many parameters needed for u_all
+                g_params = problem['new_g_params']
+                k_params = problem['new_k_params']
 
             else:
                 print('Dependent parameters with model truncated in physical parameter space')
-                results_dir = os.path.join(condition_dir, 'sobol_conditional_y')
-                os.makedirs(results_dir, exist_ok=True)
-
                 g_params = problem['g_params']
                 k_params = problem['k_params']
-                def f(x):
-                    # this is the function that takes in the samples in normal space and outputs the simulation results.
-                    # this should really be used in every one of these sampling functions
-                    # TODO, refactor all code to use this. Put it in JSR
-                    y = np.zeros((x.shape[0], gas.n_species))
-                    thermo_perturbations_reduced = x[:, :len(g_params)] * 4184  # convert RMG-UQ's kcal/mol to J/mol
-                    kinetic_perturbations_reduced = x[:, len(g_params):]  # these are the perturbations in log space, so we can exponentiate to get the kinetic multipliers
-                    kinetic_multipliers_rmg_reduced = np.exp(kinetic_perturbations_reduced)
+            def f(x):
+                # this is the function that takes in the samples in normal space and outputs the simulation results.
+                # this should really be used in every one of these sampling functions
+                # TODO, refactor all code to use this. Put it in JSR
+                y = np.zeros((x.shape[0], gas.n_species))
+                thermo_perturbations_reduced = x[:, :len(g_params)] * 4184  # convert RMG-UQ's kcal/mol to J/mol
+                kinetic_perturbations_reduced = x[:, len(g_params):]  # these are the perturbations in log space, so we can exponentiate to get the kinetic multipliers
+                kinetic_multipliers_rmg_reduced = np.exp(kinetic_perturbations_reduced)
 
-                    thermo_perturbations = np.zeros((x.shape[0], len(species_list)))
-                    kinetic_multipliers_rmg = np.ones((x.shape[0], len(reaction_list)))
-                    for i, sp_index in enumerate(g_params):
-                        thermo_perturbations[:, sp_index] = thermo_perturbations_reduced[:, i]
-                    for i, rxn_index in enumerate(k_params):
-                        kinetic_multipliers_rmg[:, rxn_index] = kinetic_multipliers_rmg_reduced[:, i]
-                    kinetic_multipliers_ct = kinetic_multipliers_rmg @ ct2rmg_matrix.T  # convert from RMG reaction space to Cantera reaction space
-                    # TODO get rid of the RMG to cantera conversions. Just save a cantera covariance matrix as the input
+                thermo_perturbations = np.zeros((x.shape[0], len(species_list)))
+                kinetic_multipliers_rmg = np.ones((x.shape[0], len(reaction_list)))
+                for i, sp_index in enumerate(g_params):
+                    thermo_perturbations[:, sp_index] = thermo_perturbations_reduced[:, i]
+                for i, rxn_index in enumerate(k_params):
+                    kinetic_multipliers_rmg[:, rxn_index] = kinetic_multipliers_rmg_reduced[:, i]
+                kinetic_multipliers_ct = kinetic_multipliers_rmg @ ct2rmg_matrix.T  # convert from RMG reaction space to Cantera reaction space
+                # TODO get rid of the RMG to cantera conversions. Just save a cantera covariance matrix as the input
 
-                    for i in range(x.shape[0]):
-                        # perturb all the species
-                        for sp_index in g_params:
-                            perturbed_sp = ezuq.util.perturb_species_ct(gas.species()[sp_index], thermo_perturbations[i, sp_index])
-                            gas.modify_species(sp_index, perturbed_sp)
+                for i in range(x.shape[0]):
+                    # perturb all the species
+                    for sp_index in g_params:
+                        perturbed_sp = ezuq.util.perturb_species_ct(gas.species()[sp_index], thermo_perturbations[i, sp_index])
+                        gas.modify_species(sp_index, perturbed_sp)
 
-                        # set multipliers
-                        for rxn_index_ct in range(gas.n_reactions):
-                            if kinetic_multipliers_ct[i, rxn_index_ct] != 1.0:
-                                gas.set_multiplier(kinetic_multipliers_ct[i, rxn_index_ct], rxn_index_ct)
-                        try:
-                            y[i, :] = run_simulation(gas, settings)
-                        except ct.CanteraError:
-                            y[i, :] = np.nan
+                    # set multipliers
+                    for rxn_index_ct in range(gas.n_reactions):
+                        if kinetic_multipliers_ct[i, rxn_index_ct] != 1.0:
+                            gas.set_multiplier(kinetic_multipliers_ct[i, rxn_index_ct], rxn_index_ct)
+                    try:
+                        y[i, :] = run_simulation(gas, settings)
+                    except ct.CanteraError:
+                        y[i, :] = np.nan
 
-                        # Reset things
-                        for sp_index in g_params:
-                            gas.modify_species(sp_index, thermo_copies[sp_index])
-                        gas.set_multiplier(1.0)
+                    # Reset things
+                    for sp_index in g_params:
+                        gas.modify_species(sp_index, thermo_copies[sp_index])
+                    gas.set_multiplier(1.0)
 
-                    output_species_index = settings['output_species_index']
-                    return y[:, output_species_index]
-
-
-                # Make the truncated thermo covariance matrix
-                thermo_covariance_matrix_reduced = thermo_covariance_matrix[np.ix_(g_params, g_params)]
-                kinetic_covariance_matrix_reduced = kinetic_covariance_matrix[np.ix_(k_params, k_params)]
-
-                k = len(g_params) + len(k_params)
-
-                # make a combined covariance matrix so we can do the sampling in one step
-                cov = np.zeros((k, k))
-                cov[:thermo_covariance_matrix_reduced.shape[0], :thermo_covariance_matrix_reduced.shape[0]] = thermo_covariance_matrix_reduced
-                cov[thermo_covariance_matrix_reduced.shape[0]:, thermo_covariance_matrix_reduced.shape[0]:] = kinetic_covariance_matrix_reduced
-                L = np.linalg.cholesky(cov)
-                assert np.isclose(L @ L.T, cov).all()
-
-                mean = np.zeros(k)
-
-                u_all = np.load(os.path.join(condition_dir, 'sobol_samples_u_all.npy'))
-
-                if chunk_index * CHUNK_SIZE >= u_all.shape[0]:
-                    print(f"Chunk index {chunk_index} is out of range for number of samples {u_all.shape[0]} with chunk size {CHUNK_SIZE}")
-                    exit(0)
-
-                # reduce the uniform Sobol samples to their relevant chunk
-                maximum_index = min((chunk_index + 1) * CHUNK_SIZE, u_all.shape[0])
-                u_all = u_all[chunk_index * CHUNK_SIZE: maximum_index, :]
-                N = u_all.shape[0]
-                all_N_indices = np.arange(N)
-
-                # 1. Partition the Sobol samples into u and u_prime
-                u = u_all[:, :k]
-                u_prime = u_all[:, k:]
-
-                # 2. Generate unit normals from unit uniform Sobol samples
-                x_tilde = scipy.stats.norm.ppf(u)
-                x_tilde_prime = scipy.stats.norm.ppf(u_prime)
-
-                x = x_tilde @ L.T + mean  # L does not equal its transpose, so you have to be really careful here. check that you're recreating the cov matrix
-                x_prime = x_tilde_prime @ L.T + mean
-
-                f_y_z = f(x)
-                f_y_z_filename = os.path.join(results_dir, f'f_y_z_{chunk_index:04}.npy')
-                np.save(f_y_z_filename, f_y_z)
-                f_y_prime_z_prime = f(x_prime)
-                f_y_prime_z_prime_filename = os.path.join(results_dir, f'f_y_prime_z_prime_{chunk_index:04}.npy')
-                np.save(f_y_prime_z_prime_filename, f_y_prime_z_prime)
-                # don't compute variance D until all chunks have been computed
+                output_species_index = settings['output_species_index']
+                return y[:, output_species_index]
 
 
-                f_y_z_bar_prime = np.zeros((N, k))
-                f_y_bar_prime_z = np.zeros((N, k))
-                for q in range(k):
-                    y_indices = [q]  # compute 1st order index on first parameter
-                    z_indices = list(set(np.arange(k)) - set(y_indices))
+            # Make the truncated thermo covariance matrix
+            thermo_covariance_matrix_reduced = thermo_covariance_matrix[np.ix_(g_params, g_params)]
+            kinetic_covariance_matrix_reduced = kinetic_covariance_matrix[np.ix_(k_params, k_params)]
 
-                    # partition the mean and covariance matrices
-                    # mean is zero for all of these
-                    mu_y = mean[y_indices]
-                    mu_z = mean[z_indices]
-                    Sigma_y  = cov[np.ix_(y_indices, y_indices)]
-                    Sigma_z  = cov[np.ix_(z_indices, z_indices)]
-                    Sigma_yz = cov[np.ix_(y_indices, z_indices)]
-                    Sigma_zy = cov[np.ix_(z_indices, y_indices)]
+            k = len(g_params) + len(k_params)
 
-                    Sigma_y_inv = np.linalg.inv(Sigma_y)
-                    Sigma_z_inv = np.linalg.inv(Sigma_z)
+            # make a combined covariance matrix so we can do the sampling in one step
+            cov = np.zeros((k, k))
+            cov[:thermo_covariance_matrix_reduced.shape[0], :thermo_covariance_matrix_reduced.shape[0]] = thermo_covariance_matrix_reduced
+            cov[thermo_covariance_matrix_reduced.shape[0]:, thermo_covariance_matrix_reduced.shape[0]:] = kinetic_covariance_matrix_reduced
+            L = np.linalg.cholesky(cov)
+            assert np.isclose(L @ L.T, cov).all()
 
-                    Sigma_zc = Sigma_z - Sigma_zy @ Sigma_y_inv @ Sigma_yz
-                    Sigma_yc = Sigma_y - Sigma_yz @ Sigma_z_inv @ Sigma_zy
+            mean = np.zeros(k)
 
-                    A_zc = np.linalg.cholesky(Sigma_zc)
-                    A_yc = np.linalg.cholesky(Sigma_yc)
+            u_all = np.load(os.path.join(condition_dir, 'sobol_samples_u_all.npy'))
 
-                    v_prime = u_prime[np.ix_(all_N_indices, y_indices)]
-                    w_prime = u_prime[np.ix_(all_N_indices, z_indices)]
+            if chunk_index * CHUNK_SIZE >= u_all.shape[0]:
+                print(f"Chunk index {chunk_index} is out of range for number of samples {u_all.shape[0]} with chunk size {CHUNK_SIZE}")
+                exit(0)
 
-                    # 3. Generate unconditional normals
-    
-                    # split into subsets
-                    y = x[np.ix_(all_N_indices, y_indices)]
-                    z = x[np.ix_(all_N_indices, z_indices)]
+            # reduce the uniform Sobol samples to their relevant chunk
+            maximum_index = min((chunk_index + 1) * CHUNK_SIZE, u_all.shape[0])
+            u_all = u_all[chunk_index * CHUNK_SIZE: maximum_index, :]
+            N = u_all.shape[0]
+            all_N_indices = np.arange(N)
 
-                    # 4. Generate conditional normals
-                    mu_zc = np.tile(mu_z.T, (N, 1)) + (Sigma_zy @ Sigma_y_inv @ (y - np.tile(mu_y.T, (N, 1))).T).T
-                    mu_yc = np.tile(mu_y.T, (N, 1)) + (Sigma_yz @ Sigma_z_inv @ (z - np.tile(mu_z.T, (N, 1))).T).T
+            # 1. Partition the Sobol samples into u and u_prime
+            u = u_all[:, :k]
+            u_prime = u_all[:, k:]
 
-                    # partition the standard normals
-                    y_tilde_prime = scipy.stats.norm.ppf(v_prime)
-                    z_tilde_prime = scipy.stats.norm.ppf(w_prime)
+            # 2. Generate unit normals from unit uniform Sobol samples
+            x_tilde = scipy.stats.norm.ppf(u)
+            x_tilde_prime = scipy.stats.norm.ppf(u_prime)
 
-                    y_bar_prime = y_tilde_prime @ A_yc.T + mu_yc
-                    z_bar_prime = z_tilde_prime @ A_zc.T + mu_zc
+            x = x_tilde @ L.T + mean  # L does not equal its transpose, so you have to be really careful here. check that you're recreating the cov matrix
+            x_prime = x_tilde_prime @ L.T + mean
 
-                    # Have to reconstruct [y, z] using appropriate placement of indices
-                    y_z_bar_prime = np.zeros((N, k))
-                    y_z_bar_prime[:, y_indices] = y
-                    y_z_bar_prime[:, z_indices] = z_bar_prime
-
-                    y_bar_prime_z = np.zeros((N, k))
-                    y_bar_prime_z[:, y_indices] = y_bar_prime
-                    y_bar_prime_z[:, z_indices] = z
-
-                    # Evaluate functions
-                    f_y_z_bar_prime[:, q] = f(y_z_bar_prime)
-                    f_y_bar_prime_z[:, q] = f(y_bar_prime_z)
-
-                f_y_z_bar_prime_filename = os.path.join(results_dir, f'f_y_z_bar_prime_{chunk_index:04}.npy')
-                np.save(f_y_z_bar_prime_filename, f_y_z_bar_prime)
-                f_y_bar_prime_z_filename = os.path.join(results_dir, f'f_y_bar_prime_z_{chunk_index:04}.npy')
-                np.save(f_y_bar_prime_z_filename, f_y_bar_prime_z)
+            f_y_z = f(x)
+            f_y_z_filename = os.path.join(results_dir, f'f_y_z_{chunk_index:04}.npy')
+            np.save(f_y_z_filename, f_y_z)
+            f_y_prime_z_prime = f(x_prime)
+            f_y_prime_z_prime_filename = os.path.join(results_dir, f'f_y_prime_z_prime_{chunk_index:04}.npy')
+            np.save(f_y_prime_z_prime_filename, f_y_prime_z_prime)
+            # don't compute variance D until all chunks have been computed
 
 
+            f_y_z_bar_prime = np.zeros((N, k))
+            f_y_bar_prime_z = np.zeros((N, k))
+            for q in range(k):
+                y_indices = [q]  # compute 1st order index on first parameter
+                z_indices = list(set(np.arange(k)) - set(y_indices))
 
+                # partition the mean and covariance matrices
+                # mean is zero for all of these
+                mu_y = mean[y_indices]
+                mu_z = mean[z_indices]
+                Sigma_y  = cov[np.ix_(y_indices, y_indices)]
+                Sigma_z  = cov[np.ix_(z_indices, z_indices)]
+                Sigma_yz = cov[np.ix_(y_indices, z_indices)]
+                Sigma_zy = cov[np.ix_(z_indices, y_indices)]
 
+                Sigma_y_inv = np.linalg.inv(Sigma_y)
+                Sigma_z_inv = np.linalg.inv(Sigma_z)
 
+                Sigma_zc = Sigma_z - Sigma_zy @ Sigma_y_inv @ Sigma_yz
+                Sigma_yc = Sigma_y - Sigma_yz @ Sigma_z_inv @ Sigma_zy
 
+                A_zc = np.linalg.cholesky(Sigma_zc)
+                A_yc = np.linalg.cholesky(Sigma_yc)
 
+                v_prime = u_prime[np.ix_(all_N_indices, y_indices)]
+                w_prime = u_prime[np.ix_(all_N_indices, z_indices)]
 
+                # 3. Generate unconditional normals
 
+                # split into subsets
+                y = x[np.ix_(all_N_indices, y_indices)]
+                z = x[np.ix_(all_N_indices, z_indices)]
 
+                # 4. Generate conditional normals
+                mu_zc = np.tile(mu_z.T, (N, 1)) + (Sigma_zy @ Sigma_y_inv @ (y - np.tile(mu_y.T, (N, 1))).T).T
+                mu_yc = np.tile(mu_y.T, (N, 1)) + (Sigma_yz @ Sigma_z_inv @ (z - np.tile(mu_z.T, (N, 1))).T).T
 
+                # partition the standard normals
+                y_tilde_prime = scipy.stats.norm.ppf(v_prime)
+                z_tilde_prime = scipy.stats.norm.ppf(w_prime)
 
+                y_bar_prime = y_tilde_prime @ A_yc.T + mu_yc
+                z_bar_prime = z_tilde_prime @ A_zc.T + mu_zc
 
+                # Have to reconstruct [y, z] using appropriate placement of indices
+                y_z_bar_prime = np.zeros((N, k))
+                y_z_bar_prime[:, y_indices] = y
+                y_z_bar_prime[:, z_indices] = z_bar_prime
 
+                y_bar_prime_z = np.zeros((N, k))
+                y_bar_prime_z[:, y_indices] = y_bar_prime
+                y_bar_prime_z[:, z_indices] = z
 
+                # Evaluate functions
+                f_y_z_bar_prime[:, q] = f(y_z_bar_prime)
+                f_y_bar_prime_z[:, q] = f(y_bar_prime_z)
+
+            f_y_z_bar_prime_filename = os.path.join(results_dir, f'f_y_z_bar_prime_{chunk_index:04}.npy')
+            np.save(f_y_z_bar_prime_filename, f_y_z_bar_prime)
+            f_y_bar_prime_z_filename = os.path.join(results_dir, f'f_y_bar_prime_z_{chunk_index:04}.npy')
+            np.save(f_y_bar_prime_z_filename, f_y_bar_prime_z)
 
         else:
             # no model reduction
