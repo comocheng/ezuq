@@ -376,6 +376,8 @@ def run_chunk(settings_yaml, chunk_index):
             # no model reduction
             # Kucherenko 2012 sampling method
             print('Dependent parameters with no model reduction')
+            results_dir = os.path.join(condition_dir, 'sobol_conditional_y')
+            os.makedirs(results_dir, exist_ok=True)
 
             def f(x):
                 # this is the function that takes in the samples in normal space and outputs the simulation results.
@@ -444,11 +446,11 @@ def run_chunk(settings_yaml, chunk_index):
             x_prime = x_tilde_prime @ L.T + mean
 
             f_y_z = f(x)
-            f_x_y_filename = os.path.join(results_dir, f'f_x_y_{chunk_index:04}.npy')
-            np.save(f_x_y_filename, f_y_z)
+            f_y_z_filename = os.path.join(results_dir, f'f_y_z_{chunk_index:04}.npy')
+            np.save(f_y_z_filename, f_y_z)
             f_y_prime_z_prime = f(x_prime)
-            f_x_prime_y_prime_filename = os.path.join(results_dir, f'f_x_prime_y_prime_{chunk_index:04}.npy')
-            np.save(f_x_prime_y_prime_filename, f_y_prime_z_prime)
+            f_y_prime_z_prime_filename = os.path.join(results_dir, f'f_y_prime_z_prime_{chunk_index:04}.npy')
+            np.save(f_y_prime_z_prime_filename, f_y_prime_z_prime)
             # don't compute variance D until all chunks have been computed
 
 
@@ -496,8 +498,14 @@ def run_chunk(settings_yaml, chunk_index):
                 y_bar_prime = y_tilde_prime @ A_yc.T + mu_yc
                 z_bar_prime = z_tilde_prime @ A_zc.T + mu_zc
 
-                y_z_bar_prime = np.concatenate((y, z_bar_prime), axis=1)
-                y_bar_prime_z = np.concatenate((y_bar_prime, z), axis=1)
+                # Have to reconstruct [y, z] using appropriate placement of indices
+                y_z_bar_prime = np.zeros((N, k))
+                y_z_bar_prime[:, y_indices] = y
+                y_z_bar_prime[:, z_indices] = z_bar_prime
+
+                y_bar_prime_z = np.zeros((N, k))
+                y_bar_prime_z[:, y_indices] = y_bar_prime
+                y_bar_prime_z[:, z_indices] = z
 
                 # Evaluate functions
                 f_y_z_bar_prime[:, q] = f(y_z_bar_prime)
@@ -513,37 +521,106 @@ def reassemble_chunks(condition_dir):
     """After all the chunks have been run, we need to reassemble the results into a single file for each condition"""
 
     condition_name = os.path.basename(condition_dir)
-    y_files = sorted(glob.glob(os.path.join(condition_dir, 'sobol_y', f'y_*.npy')))
+    sobol_dir = os.path.dirname(condition_dir)
 
-    if len(y_files) == 0:
-        print(f"No chunk files found for condition {condition_name} in {os.path.join(condition_dir, 'sobol_y')}")
+    # Figure out what sort of analysis is being done here
+    y_files = sorted(glob.glob(os.path.join(condition_dir, 'sobol_y', f'y_[0-9]*.npy')))
+    f_y_z_files = sorted(glob.glob(os.path.join(condition_dir, 'sobol_conditional_y', f'f_y_z_[0-9]*.npy')))
+    if f_y_z_files:
+        print(f"Found files for conditional Sobol analysis for condition {condition_name}, reassembling those")
+        # load the all_u file to get the number of samples and k
+        u_all = np.load(os.path.join(sobol_dir, 'sobol_samples_u_all.npy'))
+        N = u_all.shape[0]
+        k = u_all.shape[1] // 2
+        f_y_prime_z_prime_files = sorted(glob.glob(os.path.join(condition_dir, 'sobol_conditional_y', f'f_y_prime_z_prime_[0-9]*.npy')))
+        f_y_z_bar_prime_files = sorted(glob.glob(os.path.join(condition_dir, 'sobol_conditional_y', f'f_y_z_bar_prime_[0-9]*.npy')))
+        f_y_bar_prime_z_files = sorted(glob.glob(os.path.join(condition_dir, 'sobol_conditional_y', f'f_y_bar_prime_z_[0-9]*.npy')))
+
+        f_y_z = np.zeros(N)
+        f_y_prime_z_prime = np.zeros(N)
+        f_y_z_bar_prime = np.zeros((N, k))
+        f_y_bar_prime_z = np.zeros((N, k))
+        for i in range(len(f_y_z_files)):
+            match = re.search(r'f_y_z_(\d+).npy', f_y_z_files[i])
+            if not match:
+                raise ValueError(f"Could not extract chunk index from filename {f_y_z_files[i]}")
+            index = int(match.group(1))
+            data = np.load(f_y_z_files[i])
+            assert data.shape == (min(CHUNK_SIZE, N - index * CHUNK_SIZE),), f"Expected shape of {(min(CHUNK_SIZE, N - index * CHUNK_SIZE),)} but got {data.shape} in file {f_y_z_files[i]}"
+            f_y_z[index * CHUNK_SIZE: index * CHUNK_SIZE + data.shape[0]] = data
+
+            data = np.load(f_y_prime_z_prime_files[i])
+            assert data.shape == (min(CHUNK_SIZE, N - index * CHUNK_SIZE),), f"Expected shape of {(min(CHUNK_SIZE, N - index * CHUNK_SIZE),)} but got {data.shape} in file {f_y_prime_z_prime_files[i]}"
+            f_y_prime_z_prime[index * CHUNK_SIZE: index * CHUNK_SIZE + data.shape[0]] = data
+
+            data = np.load(f_y_z_bar_prime_files[i])
+            assert data.shape == (min(CHUNK_SIZE, N - index * CHUNK_SIZE), k), f"Expected shape of {(min(CHUNK_SIZE, N - index * CHUNK_SIZE), k)} but got {data.shape} in file {f_y_z_bar_prime_files[i]}"
+            f_y_z_bar_prime[index * CHUNK_SIZE: index * CHUNK_SIZE + data.shape[0], :] = data
+
+            data = np.load(f_y_bar_prime_z_files[i])
+            assert data.shape == (min(CHUNK_SIZE, N - index * CHUNK_SIZE), k), f"Expected shape of {(min(CHUNK_SIZE, N - index * CHUNK_SIZE), k)} but got {data.shape} in file {f_y_bar_prime_z_files[i]}"
+            f_y_bar_prime_z[index * CHUNK_SIZE: index * CHUNK_SIZE + data.shape[0], :] = data
+        np.save(os.path.join(condition_dir, 'f_y_z.npy'), f_y_z)
+        np.save(os.path.join(condition_dir, 'f_y_prime_z_prime.npy'), f_y_prime_z_prime)
+        np.save(os.path.join(condition_dir, 'f_y_z_bar_prime.npy'), f_y_z_bar_prime)
+        np.save(os.path.join(condition_dir, 'f_y_bar_prime_z.npy'), f_y_bar_prime_z)
+
+    if y_files:
+        # test a sample
+        sample_y = np.load(y_files[0])
+        if sample_y.shape[0] != CHUNK_SIZE:
+            raise ValueError(f"Expected chunk size of {CHUNK_SIZE} but got {sample_y.shape[0]} in file {y_files[0]}")
+
+        k = sample_y.shape[1]
+
+        # get the total number of samples from the file count
+        N = CHUNK_SIZE * len(y_files)
+        sobol_y = np.zeros((N, k))
+
+        for i in range(len(y_files)):
+            match = re.search(r'y_(\d+).npy', y_files[i])
+            index = int(match.group(1))
+            data = np.load(y_files[i])
+            assert data.shape == (CHUNK_SIZE, k)
+            sobol_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
+
+        # starting from the end, delete any rows that are still all zeros, the difference between chunks that were fully filled and the last chunk
+        while np.all(sobol_y[-1, :] == 0):
+            sobol_y = sobol_y[:-1, :]
+
+        print(f'After reassembling, got {sobol_y.shape[0]} samples for condition {condition_name}')
+        np.save(os.path.join(condition_dir, 'sobol_results.npy'), sobol_y)
+
+
+def compute_sobol_indices(condition_dir):
+    """After reassembling the chunks, we can compute the Sobol indices"""
+
+    condition_name = os.path.basename(condition_dir)
+
+    f_y_z_file = os.path.join(condition_dir, 'f_y_z.npy')
+    if not os.path.exists(f_y_z_file):
+        print(f"No conditional Sobol results found for condition {condition_name}, skipping index computation")
         return
 
-    # test a sample
-    sample_y = np.load(y_files[0])
-    if sample_y.shape[0] != CHUNK_SIZE:
-        raise ValueError(f"Expected chunk size of {CHUNK_SIZE} but got {sample_y.shape[0]} in file {y_files[0]}")
+    f_y_z = np.load(f_y_z_file)
+    f_y_prime_z_prime = np.load(os.path.join(condition_dir, 'f_y_prime_z_prime.npy'))
+    f_y_z_bar_prime = np.load(os.path.join(condition_dir, 'f_y_z_bar_prime.npy'))
+    f_y_bar_prime_z = np.load(os.path.join(condition_dir, 'f_y_bar_prime_z.npy'))
 
-    k = sample_y.shape[1]
+    k = f_y_z_bar_prime.shape[1]
 
-    # get the total number of samples from the file count
-    N = CHUNK_SIZE * len(y_files)
-    sobol_y = np.zeros((N, k))
+    D = np.var(f_y_z)
 
-    for i in range(len(y_files)):
-        match = re.search(r'y_(\d+).npy', y_files[i])
-        index = int(match.group(1))
-        data = np.load(y_files[i])
-        assert data.shape == (CHUNK_SIZE, k)
-        sobol_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
+    S1 = np.zeros(k)
+    ST = np.zeros(k)
+    for q in range(k):
+        S1_contributions = np.multiply(f_y_z, f_y_z_bar_prime[:, q] - f_y_prime_z_prime)
+        ST_contributions = np.float_power(f_y_z - f_y_bar_prime_z[:, q], 2.0)
 
-    # starting from the end, delete any rows that are still all zeros, the difference between chunks that were fully filled and the last chunk
-    while np.all(sobol_y[-1, :] == 0):
-        sobol_y = sobol_y[:-1, :]
+        S1[q] = np.mean(S1_contributions, axis=0) / D
+        ST[q] = np.mean(ST_contributions, axis=0) / (2.0 * D)
 
-    print(f'After reassembling, got {sobol_y.shape[0]} samples for condition {condition_name}')
-    np.save(os.path.join(condition_dir, 'sobol_results.npy'), sobol_y)
-
+    return S1, ST
 
 if __name__ == "__main__":
     settings_yaml = sys.argv[1]
