@@ -189,8 +189,8 @@ for z, condition in enumerate(conditions):
 
 
     result = plt.hist(nonzero_data[:, i_sp], 48, density=True, alpha=0.6)
-    plt.axvline(x=np.mean(nonzero_data[:, i_sp]), color=colors[0], label='Mean')
-    plt.axvline(x=np.median(nonzero_data[:, i_sp]), color='black', label='Median')
+    plt.axvline(x=np.nanmean(nonzero_data[:, i_sp]), color=colors[0], label='Mean')
+    plt.axvline(x=np.nanmedian(nonzero_data[:, i_sp]), color='black', label='Median')
     
     # Log scale for x axis is a bit confusing
     # bins = np.geomspace(nonzero_data[:, i_sp].min(), nonzero_data[:, i_sp].max(), 64)
@@ -239,6 +239,8 @@ plt.title(f'{gas.species_names[i_sp]} Concentration')
 plt.xlabel('Temperature (K)')
 plt.ylabel('Mole Fraction')
 plt.legend()
+
+monte_carlo_samples.shape
 
 print(lower95)
 
