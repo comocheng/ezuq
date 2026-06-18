@@ -17,18 +17,25 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.9"]
+    defaults:
+      run:
+        shell: bash -el {0}  # allegedly required for conda to activate properly
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v3
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
+        activate-environment: ezuq-env
+        auto-activate-base: false
+    - name: Install conda dependencies
+      run: |
+        conda install -y -c conda-forge -c rmg cantera rmg salib pyyaml numpy scipy
+    - name: Install ezuq
       run: |
         python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install -e ".[dev]"
     #- name: Lint with flake8
     #  run: |
     #    # stop the build if there are Python syntax errors or undefined names
