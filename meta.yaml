@@ -1,5 +1,5 @@
 {% set name = "ezuq" %}
-{% set version = "0.1.0" %}
+{% set version = "0.0.1-alpha" %}
 
 package:
   name: {{ name|lower }}
@@ -23,8 +23,11 @@ requirements:
     - python >=3.9
     # Add your runtime dependencies here, e.g.:
     - numpy >=1.24
-    - pandas >=2.0
-    - rmg::rmg
+    - scipy >=1.10
+    - pyyaml >=6.0
+    - cantera >=3.0
+    - rmgpy
+    - salib >=1.4
 
 test:
   imports:
@@ -38,7 +41,7 @@ about:
   home: https://github.com/comocheng/ezuq
   license: BSD-3-Clause
   license_file: LICENSE
-  summary: "Short one-line description of ezuq"
+  summary: "Put error bars on your microkinetic model"
   description: |
     Longer description of what ezuq does.
     Can span multiple lines.
@@ -47,4 +50,4 @@ about:
 
 extra:
   recipe-maintainers:
-    - your-github-username              # replace with actual GitHub handle(s)
+    - sevyharris              # replace with actual GitHub handle(s)

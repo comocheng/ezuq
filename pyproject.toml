@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ezuq"
-version = "0.1.0"
+version = "0.0.1-alpha"
 description = "Put error bars on your microkinetic model"
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
@@ -12,7 +12,10 @@ requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
-    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "cantera>=3.0",
+    "rmgpy",
+    "SALib>=1.4",
 ]
 
 [project.optional-dependencies]
