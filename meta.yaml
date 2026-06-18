@@ -1,13 +1,13 @@
 {% set name = "ezuq" %}
-{% set version = "0.0.1-alpha" %}
+{% set version = "0.0.1alpha" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: PLACEHOLDER_RUN_sha256sum_ON_YOUR_TARBALL
+  path: .
+  #sha256: PLACEHOLDER_RUN_sha256sum_ON_YOUR_TARBALL
 
 build:
   noarch: python
@@ -20,23 +20,26 @@ requirements:
     - pip
     - hatchling          # match whatever build backend you chose in pyproject.toml
   run:
-    - python >=3.9
+    - python >=3.11
     # Add your runtime dependencies here, e.g.:
     - numpy >=1.24
     - scipy >=1.10
     - pyyaml >=6.0
     - cantera >=3.0
-    - rmgpy
+    - rmg::rmg
     - salib >=1.4
     - pyyaml
 
 test:
   imports:
     - ezuq
-  requires:
-    - pytest
-  commands:
-    - pytest --tb=short
+    - ezuq.util
+  #source_files:
+  #  - tests/
+  #requires:
+  #  - pytest
+  #commands:
+  #  - pytest tests/
 
 about:
   home: https://github.com/comocheng/ezuq
