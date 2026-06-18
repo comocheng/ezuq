@@ -2,13 +2,12 @@ name: ezuq-env
 channels:
   - conda-forge
   - rmg
-  - defaults
 dependencies:
   - numpy>=1.24
   - scipy>=1.10
   - pyyaml>=6.0
   - cantera>=3.0
-  - rmg>=3.2.0
+  - rmg::rmg>=3.2.0
   - salib>=1.4
   - pip
   - pip:

@@ -30,6 +30,7 @@ jobs:
         environment-file: environment.yaml
         activate-environment: ezuq-env
         auto-activate-base: false
+        channel-priority: strict
     - name: Install ezuq
       run: |
         python -m pip install --upgrade pip
