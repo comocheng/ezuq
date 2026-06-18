@@ -24,6 +24,7 @@ requirements:
     # Add your runtime dependencies here, e.g.:
     - numpy >=1.24
     - pandas >=2.0
+    - rmg::rmg
 
 test:
   imports:
