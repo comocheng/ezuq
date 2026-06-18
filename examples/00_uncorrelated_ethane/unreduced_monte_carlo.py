@@ -41,6 +41,8 @@ gas = ct.Solution(os.path.join(working_dir, 'chem_annotated.yaml'))
 # Specify conditions for the simulation
 temperatures = [800, 900, 1000]
 
+i_C2H4 = ezuq.util.get_i_thing_ct({'C': 2, 'H': 4}, gas)
+i_sens = i_C2H4
 i_C2H6 = ezuq.util.get_i_thing_ct({'C': 2, 'H': 6}, gas)
 i_O2 = ezuq.util.get_i_thing_ct({'O': 2}, gas)
 i_Ar = ezuq.util.get_i_thing_ct({'Ar': 1}, gas)  # He for Nancy data
@@ -103,22 +105,20 @@ for z, condition in enumerate(conditions):
     powers = np.arange(np.log2(int(nonzero_data.shape[0])))
     sample_sizes = np.float_power(2.0, powers)
     sample_sizes = np.array(list(sample_sizes) + [len(nonzero_data) - 1]).astype(int)
-    
-    i_sp = 14
-    
+
     MEAN_TOL = 0.01
     VAR_TOL = 0.05
     
     # get the convergence sample size
-    means = [np.mean(nonzero_data[:x, i_sp]) for x in sample_sizes]
-    variances = [np.var(nonzero_data[:x, i_sp]) for x in sample_sizes]
+    means = [np.mean(nonzero_data[:x, i_sens]) for x in sample_sizes]
+    variances = [np.var(nonzero_data[:x, i_sens]) for x in sample_sizes]
     
     # start here
     N = 1024
-    prev_mean = np.mean(nonzero_data[:int(N/2), i_sp])
+    prev_mean = np.mean(nonzero_data[:int(N/2), i_sens])
     converged = False
     while N < nonzero_data.shape[0]:
-        current_mean = np.mean(nonzero_data[:N, i_sp])
+        current_mean = np.mean(nonzero_data[:N, i_sens])
         if np.abs((current_mean - prev_mean) / prev_mean) < MEAN_TOL:
             print(f'Mean converged at {N} samples')
             break
@@ -126,10 +126,10 @@ for z, condition in enumerate(conditions):
         prev_mean = current_mean
     
     N = 1024
-    prev_var = np.var(nonzero_data[:int(N/2), i_sp])
+    prev_var = np.var(nonzero_data[:int(N/2), i_sens])
     converged = False
     while N < nonzero_data.shape[0]:
-        current_var = np.var(nonzero_data[:N, i_sp])
+        current_var = np.var(nonzero_data[:N, i_sens])
         if np.abs((current_var - prev_var) / prev_var) < VAR_TOL:
             print(f'Variance converged at {N} samples')
             break
@@ -138,8 +138,8 @@ for z, condition in enumerate(conditions):
     
     
     # See what 1% of final value looks like
-    total_mean = np.mean(nonzero_data[:, i_sp])
-    total_variance = np.var(nonzero_data[:, i_sp])
+    total_mean = np.mean(nonzero_data[:, i_sens])
+    total_variance = np.var(nonzero_data[:, i_sens])
     
     fig, axs = plt.subplots(1, 2, figsize=(10, 3.5))
     
@@ -177,6 +177,21 @@ for z, condition in enumerate(conditions):
 
 # # Plot individual distributions
 
+# +
+name = conditions[1]['name']
+condition_dir = os.path.join(working_dir, 'monte_carlo', name)
+monte_carlo_samples = np.load(os.path.join(condition_dir, 'monte_carlo_results.npy'))
+
+# remove all zeros
+nonzero_data = monte_carlo_samples[~np.all(monte_carlo_samples == 0, axis=1)]
+
+print(np.median(nonzero_data[:, i_sens]))
+print(np.std(nonzero_data[:, i_sens]))
+print(np.percentile(nonzero_data[:, i_sens], 2.5))
+print(np.percentile(nonzero_data[:, i_sens], 97.5))
+
+# -
+
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 for z, condition in enumerate(conditions):
     name = condition['name']
@@ -188,18 +203,11 @@ for z, condition in enumerate(conditions):
     nonzero_data = monte_carlo_samples[~np.all(monte_carlo_samples == 0, axis=1)]
 
 
-    result = plt.hist(nonzero_data[:, i_sp], 48, density=True, alpha=0.6)
-    plt.axvline(x=np.mean(nonzero_data[:, i_sp]), color=colors[0], label='Mean')
-    plt.axvline(x=np.median(nonzero_data[:, i_sp]), color='black', label='Median')
-    
-    # Log scale for x axis is a bit confusing
-    # bins = np.geomspace(nonzero_data[:, i_sp].min(), nonzero_data[:, i_sp].max(), 64)
-    # result = plt.hist(nonzero_data[:, i_sp], bins=bins, density=True, alpha=0.6)
-    # plt.axvline(x=np.mean(nonzero_data[:, i_sp]), color=colors[0], label='Mean')
-    # plt.axvline(x=np.median(nonzero_data[:, i_sp]), color='black', label='Median')
-    # plt.xscale('log')
+    result = plt.hist(nonzero_data[:, i_sens], 48, density=True, alpha=0.6)
+    plt.axvline(x=np.mean(nonzero_data[:, i_sens]), color=colors[0], label='Mean')
+    plt.axvline(x=np.median(nonzero_data[:, i_sens]), color='black', label='Median')
 
-    plt.title(f'{gas.species_names[i_sp]} PDF - {name}')
+    plt.title(f'{gas.species_names[i_sens]} PDF - {name}')
     plt.xlabel('Mole Fraction')
     plt.ylabel('Density')
     plt.legend()
@@ -210,7 +218,7 @@ for z, condition in enumerate(conditions):
 # +
 
 temperatures = [c['temperature'] for c in conditions]
-plt.plot(temperatures, nominal_results[:, i_sp], label='Nominal Value')
+plt.plot(temperatures, nominal_results[:, i_sens], label='Nominal Value')
 for z, condition in enumerate(conditions):
     name = condition['name']
     temperature = condition['temperature']
@@ -224,19 +232,19 @@ for z, condition in enumerate(conditions):
     label = '_no_label'
     if z == 0:
         label = '95% Confidence Interval'
-    plt.fill_between(temperatures, lower95[:, i_sp], nominal_results[:, i_sp], alpha=0.1, color=colors[0], label=label)
-    plt.fill_between(temperatures, nominal_results[:, i_sp], upper95[:, i_sp], alpha=0.1, color=colors[0])
+    plt.fill_between(temperatures, lower95[:, i_sens], nominal_results[:, i_sens], alpha=0.1, color=colors[0], label=label)
+    plt.fill_between(temperatures, nominal_results[:, i_sens], upper95[:, i_sens], alpha=0.1, color=colors[0])
     
 
     plt.boxplot(
-        [nonzero_data[:, i_sp]],
+        [nonzero_data[:, i_sens]],
         positions=[temperature],
         widths=5,
         showfliers=False,
         # patch_artist=True,
         medianprops=dict(color='black')
     )
-plt.title(f'{gas.species_names[i_sp]} Concentration')
+plt.title(f'{gas.species_names[i_sens]} Concentration')
 plt.xlabel('Temperature (K)')
 plt.ylabel('Mole Fraction')
 plt.legend()
