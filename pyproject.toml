@@ -13,8 +13,6 @@ dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
     "pyyaml>=6.0",
-    "cantera>=3.0",
-    "rmg",
     "SALib>=1.4",
     "pyyaml",
 ]
@@ -25,6 +23,10 @@ dev = [
     "pytest-cov",
     "pycodestyle",
 ]
+
+
+# Note: cantera and rmgpy must be installed via conda before installing this package:
+#   conda install -c conda-forge -c rmg cantera rmgpy
 
 [project.urls]
 Repository = "https://github.com/comocheng/ezuq"
