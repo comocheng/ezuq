@@ -5,16 +5,10 @@ import subprocess
 import pytest
 import cantera as ct
 
-import rmgpy.chemkin
-import scipy.stats
 import numpy as np
 
-
 import ezuq.monte_carlo
-import ezuq.morris_screen
 import ezuq.util
-import ezuq.simulation
-
 
 @pytest.fixture(scope='class')
 def tmp_working_dir():
@@ -36,18 +30,6 @@ class TestMonteCarloUncorrelatedNoReduction:
     @pytest.fixture(autouse=True)
     def setup_class(self, tmp_working_dir):
         self.working_dir = tmp_working_dir
-
-        # # make a symbolic link to the chem_annotated.yaml file in the examples directory
-        # ethane_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'examples', 'ethane')
-        # os.symlink(os.path.join(ethane_dir, 'chem_annotated.yaml'), os.path.join(self.working_dir, 'chem_annotated.yaml'))
-        # os.symlink(os.path.join(ethane_dir, 'chem_annotated.inp'), os.path.join(self.working_dir, 'chem_annotated.inp'))
-        # os.symlink(os.path.join(ethane_dir, 'species_dictionary.txt'), os.path.join(self.working_dir, 'species_dictionary.txt'))
-        # os.symlink(os.path.join(ethane_dir, 'ct2rmg_rxn.pickle'), os.path.join(self.working_dir, 'ct2rmg_rxn.pickle'))
-
-        # uncorr_ethane_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'examples', '00_uncorrelated_ethane')
-        # os.symlink(os.path.join(uncorr_ethane_dir, 'thermo_covariance_matrix.npy'), os.path.join(self.working_dir, 'thermo_covariance_matrix.npy'))
-        # os.symlink(os.path.join(uncorr_ethane_dir, 'kinetic_covariance_matrix.npy'), os.path.join(self.working_dir, 'kinetic_covariance_matrix.npy'))
-
         self.gas = ct.Solution(os.path.join(self.working_dir, 'chem_annotated.yaml'))
 
         # Specify conditions for the simulation
