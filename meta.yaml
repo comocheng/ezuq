@@ -28,6 +28,7 @@ requirements:
     - cantera >=3.0
     - rmgpy
     - salib >=1.4
+    - pyyaml
 
 test:
   imports:

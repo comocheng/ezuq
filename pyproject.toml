@@ -16,6 +16,7 @@ dependencies = [
     "cantera>=3.0",
     "rmgpy",
     "SALib>=1.4",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
