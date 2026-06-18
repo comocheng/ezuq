@@ -10,11 +10,13 @@ It's a Python package to help you run uncertainty quantification on a microkinet
 The examples use combustion-type experiments: ignition delays (rapid compression machine/shock tube), flame speeds (burner), and species concentrations (jet-stirred reactor). 
 
 ## Installation
+From source
 1. Clone Repo
-2. `pip install -e .`
+2. `conda env create -f environment.yaml`  # you can skip this if you've already installed an rmg_env
+3. `pip install -e .`
 
-
-TODO - pypi pip install and conda install
+From conda:
+`conda install sharris7::ezuq`
 
 
 ## How it works
