@@ -23,15 +23,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up conda
+    - name: Set up conda environment
       uses: conda-incubator/setup-miniconda@v3
       with:
         python-version: ${{ matrix.python-version }}
+        environment-file: environment.yaml
         activate-environment: ezuq-env
         auto-activate-base: false
-    - name: Install conda dependencies
-      run: |
-        conda install -y -c conda-forge -c rmg cantera rmg salib pyyaml numpy scipy
     - name: Install ezuq
       run: |
         python -m pip install --upgrade pip
