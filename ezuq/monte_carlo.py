@@ -281,9 +281,18 @@ def reassemble_chunks(condition_dir):
     for i in range(len(y_files)):
         match = re.search(r'y_(\d+).npy', y_files[i])
         index = int(match.group(1))
+        
         data = np.load(y_files[i])
         assert data.shape == (CHUNK_SIZE, k)
-        monte_carlo_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
+
+        try:
+            monte_carlo_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
+        except ValueError:
+            fillshape = monte_carlo_y[index * CHUNK_SIZE:, :].shape
+            monte_carlo_y[index * CHUNK_SIZE:, :] = data[:fillshape[0], :fillshape[1]]
+
+        
+        # monte_carlo_y[index * CHUNK_SIZE: (index + 1) * CHUNK_SIZE, :] = data
 
     # see how many failed
     index_redo = set()
