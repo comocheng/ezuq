@@ -21,9 +21,12 @@ from ezuq.simulation.jsr import run_simulation
 
 CHUNK_SIZE = 1000
 
-def setup_runfiles(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=400):
+def setup_runfiles(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=400, existing_sample_path=None):
     """Set up the runfiles for the Morris screening.
     working_dir should be the directory where the RMG and Cantera mechanisms are saved.
+
+    existing_sample_path allows this to create a symbolic link rather than regenerating/copying the entire saved .npy file of Morris samples,
+    which should never change for a given model if you're using the same seed
     """
 
     morris_dir = os.path.join(working_dir, 'morris_screen')
@@ -64,10 +67,16 @@ def setup_runfiles(working_dir, conditions, N_SAMPLES=100, NUM_LEVELS=4, SEED=40
     with open(os.path.join(morris_dir, 'problem_desc.yaml'), 'w') as f:
         yaml.dump(problem, f)
 
-    # Generate Morris samples (takes a minute)
-    X = SALib.sample.morris.sample(problem, N=N_SAMPLES, num_levels=NUM_LEVELS, seed=SEED)
-    print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
-    np.save(os.path.join(morris_dir, 'morris_samples.npy'), X)
+    morris_sample_file = os.path.join(morris_dir, 'morris_samples.npy')
+    if existing_sample_path:
+        assert os.path.exists(existing_sample_path)
+        shortcut = pathlib.Path(morris_sample_file)
+        shortcut.symlink_to(pathlib.Path(existing_sample_path))
+    else:
+        # Generate fresh Morris samples (takes a minute)
+        X = SALib.sample.morris.sample(problem, N=N_SAMPLES, num_levels=NUM_LEVELS, seed=SEED)
+        print(f'Generated {X.shape[0]} samples with {X.shape[1]} variables')
+        np.save(morris_sample_file, X)
 
     ezuq.util.setup_condition_dirs(morris_dir, conditions)
 
