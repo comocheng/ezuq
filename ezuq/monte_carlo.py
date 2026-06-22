@@ -169,8 +169,8 @@ def run_chunk(settings_yaml, chunk_index):
             z_k_params = problem['z_k_params']
 
             # Decompose the covariance matrices
-            L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-            L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+            L_thermo = ezuq.util.decompose_to_sqrt(thermo_covariance_matrix)
+            L_kinetic = ezuq.util.decompose_to_sqrt(kinetic_covariance_matrix)
 
 
             # set the columns of L_thermo that aren't called out in z_g_params equal to zero
@@ -265,7 +265,9 @@ def reassemble_chunks(condition_dir):
     y_files = sorted(glob.glob(os.path.join(condition_dir, 'monte_carlo_y', f'y_*.npy')))
 
     if len(y_files) == 0:
-        raise ValueError('No files found')
+        print('No files found')
+        return
+        #raise ValueError('No files found')
 
     # test a sample
     sample_y = np.load(y_files[0])

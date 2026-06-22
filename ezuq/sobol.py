@@ -84,8 +84,8 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
                 # you have to do the truncation to figure out how many parameters needed for u_all
 
                 # do the truncation to figure out how many parameters will be left, but we still do the slicing of the covariance matrix in physical space? I don't know
-                L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-                L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
+                L_thermo = ezuq.util.decompose_to_sqrt(thermo_covariance_matrix)
+                L_kinetic = ezuq.util.decompose_to_sqrt(kinetic_covariance_matrix)
 
                 L_thermo_zeroed = np.zeros_like(L_thermo)
                 for z_g_param in morris_screen_result['z_g_params']:
@@ -313,8 +313,7 @@ def run_chunk(settings_yaml, chunk_index):
             # Get the thermo perturbations
             # ------------- Thermo perturbations -------------
             thermo_uniform_perturbations = X[:, :len(g_params)]
-            L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-            assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
+            L_thermo = ezuq.util.decompose_to_sqrt(thermo_covariance_matrix)
             z_thermo_reduced = scipy.stats.norm.ppf(thermo_uniform_perturbations)  # transform the unit uniforms to standard normals
             z_thermo = np.zeros((z_thermo_reduced.shape[0], len(species_list)))
 
@@ -325,8 +324,7 @@ def run_chunk(settings_yaml, chunk_index):
 
             # ------------- Kinetic perturbations -------------
             kinetic_uniform_perturbations = X[:, len(g_params):]
-            L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
-            assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
+            L_kinetic = ezuq.util.decompose_to_sqrt(kinetic_covariance_matrix)
             z_kinetic_reduced = scipy.stats.norm.ppf(kinetic_uniform_perturbations)
             z_kinetic = np.zeros((z_kinetic_reduced.shape[0], len(reaction_list)))
             for i, rxn_index in enumerate(k_params):
@@ -386,15 +384,13 @@ def run_chunk(settings_yaml, chunk_index):
             # Get the thermo perturbations
             # ------------- Thermo perturbations -------------
             thermo_uniform_perturbations = X[:, :len(species_list)]
-            L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-            assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
+            L_thermo = ezuq.util.decompose_to_sqrt(thermo_covariance_matrix)
             z_thermo = scipy.stats.norm.ppf(thermo_uniform_perturbations)  # transform the unit uniforms to standard normals
             thermo_perturbations = (L_thermo @ z_thermo.T).T * 4184  # convert RMG-UQ's kcal/mol to J/mol
 
             # ------------- Kinetic perturbations -------------
             kinetic_uniform_perturbations = X[:, len(species_list):]
-            L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
-            assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
+            L_kinetic = ezuq.util.decompose_to_sqrt(kinetic_covariance_matrix)
             z_kinetic = scipy.stats.norm.ppf(kinetic_uniform_perturbations)
             kinetic_perturbations = (L_kinetic @ z_kinetic.T).T  # these are the perturbations in log space, so we can exponentiate to get the kinetic multipliers
             kinetic_multipliers_rmg = np.exp(kinetic_perturbations)
@@ -507,7 +503,8 @@ def run_chunk(settings_yaml, chunk_index):
             cov = np.zeros((k, k))
             cov[:thermo_covariance_matrix_reduced.shape[0], :thermo_covariance_matrix_reduced.shape[0]] = thermo_covariance_matrix_reduced
             cov[thermo_covariance_matrix_reduced.shape[0]:, thermo_covariance_matrix_reduced.shape[0]:] = kinetic_covariance_matrix_reduced
-            L = np.linalg.cholesky(cov)
+            L = ezuq.util.decompose_to_sqrt(cov)
+            cov = L @ L.T  # the decomposition may have clipped the covariance matrix, so we'll use that version
             assert np.isclose(L @ L.T, cov).all()
 
             mean = np.zeros(k)
@@ -651,7 +648,8 @@ def run_chunk(settings_yaml, chunk_index):
             cov = np.zeros((k, k))
             cov[:thermo_covariance_matrix.shape[0], :thermo_covariance_matrix.shape[0]] = thermo_covariance_matrix
             cov[thermo_covariance_matrix.shape[0]:, thermo_covariance_matrix.shape[0]:] = kinetic_covariance_matrix
-            L = np.linalg.cholesky(cov)
+            L = ezuq.util.decompose_to_sqrt(cov)
+            cov = L @ L.T
             assert np.isclose(L @ L.T, cov).all()
 
             mean = np.zeros(k)

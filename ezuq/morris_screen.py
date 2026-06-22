@@ -145,15 +145,13 @@ def run_chunk(settings_yaml, chunk_index):
 
     # ------------- Thermo perturbations -------------
     thermo_uniform_perturbations = perturbations_chunk[:, :len(species_list)]
-    L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-    assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
+    L_thermo = ezuq.util.decompose_to_sqrt(thermo_covariance_matrix)
     z_thermo = scipy.stats.norm.ppf(thermo_uniform_perturbations)
     thermo_perturbations = (L_thermo @ z_thermo.T).T * 4184  # convert RMG-UQ's kcal/mol to J/mol
 
     # ------------- Kinetic perturbations -------------
     kinetic_uniform_perturbations = perturbations_chunk[:, len(species_list):]
-    L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
-    assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
+    L_kinetic = ezuq.util.decompose_to_sqrt(kinetic_covariance_matrix)
     z_kinetic = scipy.stats.norm.ppf(kinetic_uniform_perturbations)
     kinetic_perturbations = (L_kinetic @ z_kinetic.T).T  # these are the perturbations in log space, so we can exponentiate to get the kinetic multipliers
     kinetic_multipliers_rmg = np.exp(kinetic_perturbations)
@@ -231,11 +229,8 @@ def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, ve
     z_thermo = z[:, :gas.n_species]
     z_kinetic = z[:, gas.n_species:]
     
-    L_thermo = np.linalg.cholesky(thermo_covariance_matrix)
-    assert np.isclose(L_thermo @ L_thermo.T, thermo_covariance_matrix).all()
-    
-    L_kinetic = np.linalg.cholesky(kinetic_covariance_matrix)
-    assert np.isclose(L_kinetic @ L_kinetic.T, kinetic_covariance_matrix).all()
+    L_thermo = ezuq.util.decompose_to_sqrt(thermo_covariance_matrix)
+    L_kinetic = ezuq.util.decompose_to_sqrt(kinetic_covariance_matrix)
 
     # Transform the Morris samples from standard normal to the actual perturbations using the Cholesky decomposition of the covariance matrix
     w_thermo = (L_thermo @ z_thermo.T).T

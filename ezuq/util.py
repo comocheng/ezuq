@@ -59,3 +59,26 @@ def is_diagonal(matrix):
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         return False
     return np.all(matrix == np.diag(np.diagonal(matrix)))
+
+
+def decompose_to_sqrt(matrix):
+    # decompose a matrix into its square root
+    # do cholesky decomposition if positive definite
+    try:
+        L = np.linalg.cholesky(matrix)
+        assert np.isclose(L @ L.T, matrix).all()
+        return L
+    except np.linalg.LinAlgError as e:
+        if 'Matrix is not positive definite' not in str(e):
+            raise(e)
+
+    # matrix is not positive semidefinite, so do an eigendecomposition instead and clip the negative/tiny eigenvalues to keep it invertible
+    eig_values, eig_vectors = np.linalg.eigh(matrix)
+    floor = eig_values.max() * len(eig_values) * np.finfo(float).eps  # scale the floor to the magnitude of the matrix values
+    eig_values_clipped = np.clip(eig_values, a_min=floor, a_max=None)
+    L = eig_vectors @ np.diag(np.sqrt(eig_values_clipped))
+
+    cov_reconstruction_error = eig_vectors @ np.diag(eig_values_clipped - eig_values) @ eig_vectors.T
+    atol = np.abs(cov_reconstruction_error).max()
+    assert np.isclose(L @ L.T, matrix, rtol=1e-5, atol=atol).all()
+    return L
