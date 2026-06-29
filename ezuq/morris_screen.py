@@ -132,6 +132,13 @@ def run_chunk(settings_yaml, chunk_index):
 
     thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
     kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
+
+    if not ezuq.util.is_diagonal(thermo_covariance_matrix) or not ezuq.util.is_diagonal(kinetic_covariance_matrix):
+        print('Warning, Morris sampling is just using the diagonal here')
+
+    thermo_covariance_matrix = np.diag(np.diag(thermo_covariance_matrix))
+    kinetic_covariance_matrix = np.diag(np.diag(kinetic_covariance_matrix))
+
     assert len(species_list) == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species"
     assert len(reaction_list) == kinetic_covariance_matrix.shape[0], "Kinetic covariance matrix size does not match number of reactions"
     assert gas.n_species == thermo_covariance_matrix.shape[0], "Thermo covariance matrix size does not match number of species in Cantera mechanism"
@@ -166,6 +173,8 @@ def run_chunk(settings_yaml, chunk_index):
     kinetic_multipliers_rmg = np.exp(kinetic_perturbations)
     kinetic_multipliers_ct = kinetic_multipliers_rmg @ ct2rmg_matrix.T  # convert from RMG reaction space to Cantera reaction space
 
+
+    assert ezuq.util.is_diagonal(L_kinetic)
     # save copies of all thermo for faster perturbation
     thermo_copies = []
     for sp_index in range(gas.n_species):
@@ -229,9 +238,13 @@ def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, ve
     thermo_covariance_matrix = np.load(os.path.join(working_dir, 'thermo_covariance_matrix.npy'))
     kinetic_covariance_matrix = np.load(os.path.join(working_dir, 'kinetic_covariance_matrix.npy'))
 
+    thermo_covariance_matrix = np.diag(np.diag(thermo_covariance_matrix))
+    kinetic_covariance_matrix = np.diag(np.diag(kinetic_covariance_matrix))
+
     # if physical parameters are independent, we will always decompose them in physical space as opposed to decomposed space
     if ezuq.util.is_diagonal(thermo_covariance_matrix) and ezuq.util.is_diagonal(kinetic_covariance_matrix):
         truncate_in_decomposed_space = False
+    truncate_in_decomposed_space = False  # don't try anything fancy here
 
     # Transform the Morris samples from unit uniform to standard normal
     z = scipy.stats.norm.ppf(morris_samples)
@@ -308,7 +321,11 @@ def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, ve
             
 
             # Rank parameter names by mean effect
-            contributions = [(x, y) for y, x in sorted(zip(physical_result['mu_star'].data, problem['names']))][::-1]
+            param_indices = np.arange(problem['num_vars'])
+            sorted_order = [x for _, x in sorted(zip(physical_result['mu_star'].data, param_indices))][::-1]
+
+            contributions = [(problem['names'][j], physical_result['mu_star'].data[j], j) for j in sorted_order]
+            # contributions = [(x, y) for y, x in sorted(zip(physical_result['mu_star'].data, problem['names']))][::-1]
             
             # define the tolerance for considering a parameter to be irrelevant
             threshold = mu_star_threshold * contributions[0][1]  # use 0.01 for tighter tolerance
@@ -326,12 +343,13 @@ def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, ve
                 name = contributions[i][0]
                 if verbose:
                     print(i, name)
-                if name in species_names:
-                    g_params.append(species_names.index(name))
-                elif name in reaction_names:
-                    k_params.append(reaction_names.index(name))
+                param_index = int(contributions[i][2])
+                if param_index < len(species_list):
+                    assert name in species_names
+                    g_params.append(param_index)
                 else:
-                    raise ValueError(f'could not identify parameter with name {name}')
+                    assert name in reaction_names
+                    k_params.append(param_index - len(species_list))
 
 
             # save the problem description for this condition. Different conditions will have difference reduced parameter sets
@@ -341,9 +359,12 @@ def save_reduced_set(working_dir, conditions, i_sens, mu_star_threshold=0.05, ve
                 'num_vars': len(g_params) + len(k_params),
                 'g_param_names': [species_list[i].to_chemkin() for i in g_params],
                 'k_param_names': [reaction_list[i].to_chemkin(species_list, kinetics=False) for i in k_params],
+                'i_sens': i_sens,
+                'i_sens_name': species_names[i_sens],
+                'mu_star_threshold': mu_star_threshold,
             }
             
-            with open(os.path.join(morris_dir, condition['name'], 'morris_screen_set.yaml'), 'w') as f:
+            with open(os.path.join(morris_dir, condition['name'], f'morris_screen_set_{i_sens:04}.yaml'), 'w') as f:
                 yaml.dump(morris_screen_result, f, default_flow_style=False)
 
             contribution_results[condition['name']] = physical_result

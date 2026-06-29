@@ -134,7 +134,7 @@ def run_chunk(settings_yaml, chunk_index):
     assert gas.n_reactions == len(ct2rmg_rxn), "Kinetic covariance matrix size does not match number of reactions in Cantera mechanism"
     assert len(set(ct2rmg_rxn.values())) == len(reaction_list), "Reactions in Cantera mechanism do not match reactions in RMG mechanism"
 
-    y = np.zeros((CHUNK_SIZE, gas.n_species))
+    y = np.zeros((CHUNK_SIZE, gas.n_species)) + np.nan
 
     rng = np.random.default_rng(chunk_index)
 

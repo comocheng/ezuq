@@ -75,9 +75,10 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
         for condition in conditions:
             morris_condition_dir = os.path.join(morris_dir, condition['name'])
             sobol_condition_dir = os.path.join(sobol_dir, condition['name'])
-            shutil.copyfile(os.path.join(morris_condition_dir, 'morris_screen_set.yaml'), os.path.join(sobol_condition_dir, 'morris_screen_set.yaml'))
-            with open(os.path.join(sobol_condition_dir, 'morris_screen_set.yaml'), 'r') as f:
+            shutil.copyfile(os.path.join(morris_condition_dir, f'morris_screen_set_{i_sens:04}.yaml'), os.path.join(sobol_condition_dir, f'morris_screen_set_{i_sens:04}.yaml'))
+            with open(os.path.join(sobol_condition_dir, f'morris_screen_set_{i_sens:04}.yaml'), 'r') as f:
                 morris_screen_result = yaml.load(f, Loader=yaml.FullLoader)
+                assert morris_screen_result['i_sens'] == i_sens
 
             if 'z_g_params' in morris_screen_result:
                 print('Dependent parameters with model truncated in decomposed space')
@@ -126,13 +127,15 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
                     'new_k_params': new_k_params,
                     'z_g_params': morris_screen_result['z_g_params'],
                     'z_k_params': morris_screen_result['z_k_params'],
-                    'model_reduction': True
+                    'model_reduction': True,
+                    'i_sens': morris_screen_result['i_sens']
                 }
                 with open(os.path.join(sobol_condition_dir, 'problem_desc.yaml'), 'w') as f:
                     yaml.dump(problem, f, default_flow_style=False)
 
 
             else:  # we're truncating in physical parameter space
+                print('truncating in physical parameter space. Should be this.')
                 g_params = morris_screen_result['g_params']
                 k_params = morris_screen_result['k_params']
                 g_param_names = morris_screen_result['g_param_names']
@@ -147,7 +150,8 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
                     'k_params': k_params,
                     'g_param_names': g_param_names,
                     'k_param_names': k_param_names,
-                    'model_reduction': True
+                    'model_reduction': True,
+                    'i_sens': morris_screen_result['i_sens']
                 }
                 with open(os.path.join(sobol_condition_dir, 'problem_desc.yaml'), 'w') as f:
                     yaml.dump(problem, f, default_flow_style=False)
@@ -168,6 +172,7 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
                     np.save(os.path.join(sobol_condition_dir, 'sobol_samples_u_all.npy'), u_all)
 
                 else:
+                    print('Uncorrelated. Truncating.')
                     # Generate Sobol samples (takes a minute)
                     # these will be different for each condition because the reduced parameter set will be different
                     X = SALib.sample.sobol.sample(problem, N=N, calc_second_order=False, seed=SEED)
@@ -210,7 +215,8 @@ def setup_runfiles(working_dir, conditions, morris_dir='?', i_sens=None, N=1024,
                 'k_params': k_params,
                 'g_param_names': species_names,
                 'k_param_names': reaction_names,
-                'model_reduction': False
+                'model_reduction': False,
+                'i_sens': i_sens,
             }
             for condition in conditions:
                 sobol_condition_dir = os.path.join(sobol_dir, condition['name'])
@@ -441,6 +447,7 @@ def run_chunk(settings_yaml, chunk_index):
 
             # Now figure out what style truncation we're doing. Correlated or uncorrelated
             if 'z_g_params' in problem:
+                raise NotImplementedError('retroactively disabling this as ill-advised')
                 # truncation in decomposed space translated back to physical parameters
                 print('Dependent parameters with model truncated in decomposed space')
                 # you have to do the truncation to figure out how many parameters needed for u_all
@@ -489,7 +496,8 @@ def run_chunk(settings_yaml, chunk_index):
                         gas.modify_species(sp_index, thermo_copies[sp_index])
                     gas.set_multiplier(1.0)
 
-                output_species_index = settings['output_species_index']
+                output_species_index = problem['i_sens']
+                # output_species_index = settings['output_species_index']
                 return y[:, output_species_index]
 
 
